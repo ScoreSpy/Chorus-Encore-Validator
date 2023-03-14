@@ -41,3 +41,15 @@ export async function findSongs (rootDir: string, results: SongArchive[]): Promi
 export function createMD5 (data: BinaryLike) {
   return createHash('md5').update(data).digest('hex')
 }
+
+export function getFilesafeTimestamp () {
+  const currentDate = new Date()
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth() + 1
+  const day = currentDate.getDate()
+  const hours = currentDate.getHours()
+  const minutes = currentDate.getMinutes()
+  const seconds = currentDate.getSeconds()
+
+  return `${year}_${month.toString().padStart(2, '0')}_${day.toString().padStart(2, '0')}__${hours.toString().padStart(2, '0')}_${minutes.toString().padStart(2, '0')}_${seconds.toString().padStart(2, '0')}`
+}

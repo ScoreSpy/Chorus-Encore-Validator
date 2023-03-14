@@ -5,6 +5,7 @@ import * as formats from '../supportedFiles'
 import * as chalk from 'chalk'
 import parsers from './../parsers'
 import { readFile } from 'node:fs/promises'
+import logger from './logger'
 
 export default class Song {
   errors: string[]
@@ -90,10 +91,12 @@ export default class Song {
   private printMessages () {
     for (const error of this.errors) {
       console.log(chalk.redBright(`ERROR ${this.baseDir}: ${error}`))
+      logger.log(`ERROR ${this.baseDir}: ${error}`)
     }
 
     for (const warning of this.warnings) {
       console.log(chalk.hex('#FFA500')(`WARNING ${this.baseDir}: ${warning}`))
+      logger.log(`WARNING ${this.baseDir}: ${warning}`)
     }
   }
 

@@ -145,3 +145,4 @@ dist
 
 # custom
 [Bb]uild/
+*.log
