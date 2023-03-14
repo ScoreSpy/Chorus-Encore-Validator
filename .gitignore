@@ -147,3 +147,4 @@ dist
 [Bb]uild/
 *.log
 [Ss]hadow/
+output.json
