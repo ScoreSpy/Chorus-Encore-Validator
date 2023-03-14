@@ -2,6 +2,8 @@
 import { findSongs } from './helpers'
 import Song from './classes/Song'
 import logger from './classes/logger'
+import { SongData } from './types'
+import { writeFile } from 'node:fs/promises'
 
 async function init () {
   logger.log('Chorus Encore Validator - 14/03/2023')
@@ -9,10 +11,16 @@ async function init () {
   const results = await findSongs('C:\\Users\\Ahriana\\Downloads\\test', [])
   logger.log(`found ${results.length} songs`)
 
+  const output: SongData[] = []
+
   for (const result of results) {
     const song = new Song(result)
     await song.validateSong()
+    output.push(song.toJSON())
   }
+
+  await writeFile('output.json', JSON.stringify(output, null, 4))
+  logger.log('metadata writen to disk')
 }
 
 init()
