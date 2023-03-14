@@ -3,15 +3,29 @@
     "build": "npx tsc",
     "lint": "gts lint",
     "clean": "gts clean",
-    "compile": "tsc",
+    "compile": "npm run build && pkg ./build/src/index.js --config package.json",
     "fix": "gts fix",
     "prepare": "npm.cmd run compile",
     "pretest": "npm.cmd run compile",
     "posttest": "npm.cmd run lint"
   },
+  "pkg": {
+    "targets": [
+      "node16-win-x64",
+      "node16-linux-x64",
+      "node16-macos-x64"
+    ],
+    "outputPath": "dist"
+  },
   "devDependencies": {
-    "gts": "^3.1.1",
-    "typescript": "^4.9.5",
-    "@types/node": "^14.11.2"
+    "@types/node": "^14.11.2",
+    "@typescript-eslint/eslint-plugin": "^5.55.0",
+    "@typescript-eslint/parser": "^5.55.0",
+    "eslint": "^7.32.0",
+    "pkg": "^5.8.1",
+    "typescript": "^4.9.5"
+  },
+  "dependencies": {
+
   }
 }
