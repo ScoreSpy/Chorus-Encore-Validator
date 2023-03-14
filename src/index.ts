@@ -24,9 +24,9 @@ async function init () {
         description: 'The path to the base directory.',
         demandOption: true
       }).
-      option('shadowDir', {
+      option('outputDir', {
         type: 'string',
-        description: 'The path to the shadow directory.',
+        description: 'The path to the output directory.',
         demandOption: true
       }).
       option('dryRun', {
@@ -43,7 +43,7 @@ async function init () {
 
     appArguments = {
       baseDir: config.baseDir,
-      shadowDir: config.shadowDir,
+      outputDir: config.outputDir,
       dryRun: config.dryRun
     }
   }
@@ -63,7 +63,7 @@ async function init () {
     if (data === null) { continue }
 
     output.push(data)
-    const outputPath = replacePathPart(parse(song.baseDir).dir, appArguments.baseDir, appArguments.shadowDir)
+    const outputPath = replacePathPart(parse(song.baseDir).dir, appArguments.baseDir, appArguments.outputDir)
     if (!await fileExists(outputPath)) { await mkdir(outputPath, { recursive: true }) }
     await song.createEncryptedArchive(join(outputPath, sanitizeFileName(`${parse(song.baseDir).base}.ce`)))
   }

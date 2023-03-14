@@ -137,6 +137,6 @@ export type SongData = {
 
 export type ApplicationArguments = {
   baseDir: string;
-  shadowDir: string;
+  outputDir: string;
   dryRun: boolean;
 }
