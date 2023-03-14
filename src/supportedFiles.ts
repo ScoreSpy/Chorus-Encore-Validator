@@ -1,3 +1,5 @@
+import { parse } from 'node:path'
+
 export const SupportedVideoNames = ['highway', 'video']
 export const SupportedVideoFormats = ['.mp4', '.avi', '.webm', '.vp8', '.ogv', '.mpeg']
 
@@ -13,6 +15,26 @@ export const SupportedChartFormats = ['.mid', '.chart']
 export const SupportedConfigNames = ['song']
 export const SupportedConfigFormats = ['.ini']
 
+export function isSupportedFile (fileName: string, includeVideo = true): boolean {
+  const File = parse(fileName)
+  const FileName = File.name.toLocaleLowerCase()
+  const FileExt = File.ext.toLocaleLowerCase()
+
+  if (SupportedChartNames.includes(FileName) && SupportedChartFormats.includes(FileExt)) {
+    return true
+  } else if (SupportedConfigNames.includes(FileName) && SupportedConfigFormats.includes(FileExt)) {
+    return true
+  } else if (includeVideo && SupportedVideoNames.includes(FileName) && SupportedVideoFormats.includes(FileExt)) {
+    return true
+  } else if (SupportedImageNames.includes(FileName) && SupportedImageFormats.includes(FileExt)) {
+    return true
+  } else if (SupportedStemNames.includes(FileName) && SupportedAudioFormats.includes(FileExt)) {
+    return true
+  }
+
+  return false
+}
+
 export default {
   SupportedVideoNames,
   SupportedVideoFormats,
@@ -27,5 +49,7 @@ export default {
   SupportedChartFormats,
 
   SupportedConfigNames,
-  SupportedConfigFormats
+  SupportedConfigFormats,
+
+  isSupportedFile
 }

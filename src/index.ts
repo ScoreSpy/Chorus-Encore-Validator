@@ -19,6 +19,7 @@ async function init () {
     const data = song.toJSON()
     if (data === null) { continue }
     output.push(data)
+    await song.createArchive()
   }
 
   await writeFile('output.json', JSON.stringify(output, null, 4))

@@ -1,11 +1,13 @@
 /* eslint-disable guard-for-in */
-import type { ChorusChartData, ChorusIni, SongArchive, SongData } from '../types'
+import { createWriteStream } from 'node:fs'
 import { join, parse } from 'node:path'
-import * as formats from '../supportedFiles'
-import * as chalk from 'chalk'
-import parsers from './../parsers'
 import { readFile } from 'node:fs/promises'
+import * as formats from '../supportedFiles'
+import chalk from 'chalk'
+import JSZip from 'jszip'
 import logger from './logger'
+import parsers from './../parsers'
+import type { ChorusChartData, ChorusIni, SongArchive, SongData } from '../types'
 
 export default class Song {
   errors: string[]
@@ -154,5 +156,25 @@ export default class Song {
     }
 
     this.printMessages()
+  }
+
+  public async createArchive () {
+    const zip = new JSZip()
+
+    for (const file of this.files) {
+      if (formats.isSupportedFile(file, true)) {
+        zip.file(file, await readFile(join(this.baseDir, file)))
+      }
+    }
+
+    // write zip to disk
+    const buffer = await zip.generateNodeStream({ type: 'nodebuffer', streamFiles: true })
+    const fileStream = createWriteStream('archive.zip')
+    buffer.pipe(fileStream)
+
+    return new Promise((resolve, reject) => {
+      fileStream.on('finish', resolve)
+      fileStream.on('error', reject)
+    })
   }
 }
