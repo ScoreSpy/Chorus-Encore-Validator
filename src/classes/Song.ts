@@ -160,7 +160,7 @@ export default class Song {
     this.printMessages()
   }
 
-  public async createEncryptedArchive () {
+  public async createEncryptedArchive (output: string) {
     const zip = new JSZip()
     for (const file of this.files) {
       if (formats.isSupportedFile(file, true)) {
@@ -171,11 +171,11 @@ export default class Song {
     // generate encrypted buffer
     const buffer = await zip.generateAsync({ type: 'nodebuffer', streamFiles: true })
     const iv = randomBytes(cryptoConfig.IV_LENGTH)
-    const cipher = createCipheriv('aes-256-cbc', cryptoConfig.SECRET_KEY, iv)
+    const cipher = createCipheriv('aes-256-cbc', Buffer.from(cryptoConfig.SECRET_KEY, 'hex'), iv)
     const encryptedBuffer = Buffer.concat([cipher.update(buffer), cipher.final()])
 
     // write encrypted zip to disk
-    const fileStream = createWriteStream('encrypted_archive.zip')
+    const fileStream = createWriteStream(output)
     fileStream.write(iv.toString('binary'))
     fileStream.write(encryptedBuffer.toString('binary'))
     fileStream.end()

@@ -1,6 +1,6 @@
 import { access, constants as FS_CONSTANTS, readdir, stat } from 'node:fs/promises'
 import { BinaryLike, createHash } from 'node:crypto'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import type { SongArchive } from './types'
 
 export function fileExists (path: string): Promise<boolean> {
@@ -52,4 +52,12 @@ export function getFilesafeTimestamp () {
   const seconds = currentDate.getSeconds()
 
   return `${year}_${month.toString().padStart(2, '0')}_${day.toString().padStart(2, '0')}__${hours.toString().padStart(2, '0')}_${minutes.toString().padStart(2, '0')}_${seconds.toString().padStart(2, '0')}`
+}
+
+export function replacePathPart (filePath: string, oldPart: string, newPart: string): string {
+  const dir = dirname(filePath)
+  const base = basename(filePath)
+  const newDir = dir.replace(oldPart, newPart)
+  const newPath = join(newDir, base)
+  return newPath
 }

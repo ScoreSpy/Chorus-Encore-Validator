@@ -8,8 +8,7 @@
 
 import { createMD5 } from './../helpers'
 import type { ChorusChartData } from './../types'
-// @ts-ignore
-import * as MIDIFile from 'midifile'
+import MIDIFile from 'midifile'
 
 const SOLO_MARKER = 103
 const SP_MARKER = 116

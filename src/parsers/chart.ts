@@ -330,8 +330,8 @@ function parse (chart: Buffer): ChorusChartData | null {
   return chartData
 }
 
-export default function parseChart (midiFile: Buffer): ChorusChartData | null {
-  const data = parse(midiFile)
+export default function parseChart (chartFile: Buffer): ChorusChartData | null {
+  const data = parse(chartFile)
   if (data?.hasBrokenNotes) {
     throw new Error('Chart has broken notes')
   }
