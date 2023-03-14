@@ -1,13 +1,14 @@
 {
   "scripts": {
     "build": "npx tsc",
-    "lint": "gts lint",
     "clean": "gts clean",
     "compile": "npm run build && pkg ./build/src/index.js --config package.json",
     "fix": "gts fix",
-    "prepare": "npm.cmd run compile",
-    "pretest": "npm.cmd run compile",
-    "posttest": "npm.cmd run lint"
+    "lint": "gts lint",
+    "posttest": "npm.cmd run lint",
+    "prepare": "npm.cmd run tsc",
+    "pretest": "npm.cmd run tsc",
+    "tsc": "tsc"
   },
   "pkg": {
     "targets": [
