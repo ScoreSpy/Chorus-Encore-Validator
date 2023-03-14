@@ -151,6 +151,14 @@ export default class Song {
       this.errors.push((error as Error).message)
     }
 
+    if (this.output.iniData.delay && this.output.iniData.delay !== '0') { this.warnings.push(`ini "delay" value unexpected: ${this.output.iniData.delay} (0)`) }
+    if (this.output.iniData.hopo_frequency && this.output.iniData.hopo_frequency !== '1') { this.errors.push(`ini "hopo_frequency" value unexpected: ${this.output.iniData.hopo_frequency} (0)`) }
+    /*
+     * if (this.output.iniData.multiplier_note && this.output.iniData.multiplier_note !== '0') { this.warnings.push(`ini "multiplier_note" value unexpected: ${this.output.iniData.multiplier_note} (0)`) }
+     * if (this.output.iniData.sustain_cutoff_threshold && this.output.iniData.sustain_cutoff_threshold !== '0') { this.warnings.push(`ini "sustain_cutoff_threshold" value unexpected: ${this.output.iniData.sustain_cutoff_threshold} (0)`) }
+     * if (this.output.iniData.end_events && this.output.iniData.end_events !== '0') { this.warnings.push(`ini "end_events" value unexpected: ${this.output.iniData.end_events} (0)`) }
+     */
+
     try {
       this.output.chartData = await this.parseChart()
     } catch (error) {
