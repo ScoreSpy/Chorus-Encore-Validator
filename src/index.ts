@@ -16,7 +16,9 @@ async function init () {
   for (const result of results) {
     const song = new Song(result)
     await song.validateSong()
-    output.push(song.toJSON())
+    const data = song.toJSON()
+    if (data === null) { continue }
+    output.push(data)
   }
 
   await writeFile('output.json', JSON.stringify(output, null, 4))

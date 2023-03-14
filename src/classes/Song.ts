@@ -100,11 +100,13 @@ export default class Song {
     }
   }
 
-  public toJSON (): SongData {
+  public toJSON (): SongData | null {
+    if (this.hasError) { return null }
     return this.output
   }
 
-  public toString (): string {
+  public toString (): string | null {
+    if (this.hasError) { return null }
     return JSON.stringify(this.output, null, 4)
   }
 
