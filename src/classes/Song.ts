@@ -8,6 +8,8 @@ import JSZip from 'jszip'
 import logger from './logger'
 import parsers from './../parsers'
 import type { ChorusChartData, ChorusIni, SongArchive, SongData } from '../types'
+import { createCipheriv, randomBytes } from 'node:crypto'
+import cryptoConfig from './../config/crypto.json'
 
 export default class Song {
   errors: string[]
@@ -158,19 +160,25 @@ export default class Song {
     this.printMessages()
   }
 
-  public async createArchive () {
+  public async createEncryptedArchive () {
     const zip = new JSZip()
-
     for (const file of this.files) {
       if (formats.isSupportedFile(file, true)) {
         zip.file(file, await readFile(join(this.baseDir, file)))
       }
     }
 
-    // write zip to disk
-    const buffer = await zip.generateNodeStream({ type: 'nodebuffer', streamFiles: true })
-    const fileStream = createWriteStream('archive.zip')
-    buffer.pipe(fileStream)
+    // generate encrypted buffer
+    const buffer = await zip.generateAsync({ type: 'nodebuffer', streamFiles: true })
+    const iv = randomBytes(cryptoConfig.IV_LENGTH)
+    const cipher = createCipheriv('aes-256-cbc', cryptoConfig.SECRET_KEY, iv)
+    const encryptedBuffer = Buffer.concat([cipher.update(buffer), cipher.final()])
+
+    // write encrypted zip to disk
+    const fileStream = createWriteStream('encrypted_archive.zip')
+    fileStream.write(iv.toString('binary'))
+    fileStream.write(encryptedBuffer.toString('binary'))
+    fileStream.end()
 
     return new Promise((resolve, reject) => {
       fileStream.on('finish', resolve)

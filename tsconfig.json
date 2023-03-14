@@ -12,6 +12,7 @@
     "noImplicitReturns": true,
     "outDir": "build",
     "pretty": true,
+    "resolveJsonModule": true,
     "rootDir": ".",
     "sourceMap": true,
     "strict": true,
