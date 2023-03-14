@@ -1,4 +1,4 @@
-import * as fs from 'node:fs'
+import * as fs from 'node:fs/promises'
 import { getFilesafeTimestamp } from '../helpers'
 
 export class FileLogger {
@@ -10,14 +10,14 @@ export class FileLogger {
     this.logFile = logFile
   }
 
-  public log (message: string): void {
+  public async log (message: string): Promise<void> {
     const timestamp = new Date().toLocaleString()
     const logLine = `[${timestamp}] [${this.name}] ${message}\n`
-    fs.appendFile(this.logFile, logLine, (err) => {
-      if (err) {
-        console.error(`Failed to write log to file: ${err}`)
-      }
-    })
+    try {
+      await fs.appendFile(this.logFile, logLine)
+    } catch (error) {
+      console.error(`Failed to write log to file: ${error}`)
+    }
   }
 }
 
