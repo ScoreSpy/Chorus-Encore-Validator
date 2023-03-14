@@ -44,7 +44,7 @@ function parse (midiFile: Buffer): ChorusChartData | null {
   let isOpen = false
   let firstNoteTime = -1
   let lastNoteTime = 0
-  let previous: { time: number } = null
+  const previous = {}
   const tracks = {}
   const notes = {}
 
@@ -134,13 +134,13 @@ function parse (midiFile: Buffer): ChorusChartData | null {
            * Check chart.js for the logic behind broken notes,
            * I can't be bothered to copy/paste/adapt
            */
-          if (previous) {
-            const distance = event.playTime - previous.time
+          if (previous[diff]) {
+            const distance = event.playTime - previous[diff].time
             if (distance > 0 && distance < 5) {
-              brokenNotes.push({ time: previous.time, nextTime: event.playTime })
+              brokenNotes.push({ time: previous[diff].time, nextTime: event.playTime })
             }
           }
-          if (!previous || previous.time !== event.playTime) { previous = { time: event.playTime } }
+          if (!previous[diff] || previous[diff].time !== event.playTime) { previous[diff] = { time: event.playTime } }
           if (!firstNoteTime) { firstNoteTime = event.playTime }
           if (event.playTime > lastNoteTime) { lastNoteTime = event.playTime }
           if (!notes[`${tracks[event.track]}.${diff}`]) { notes[`${tracks[event.track]}.${diff}`] = {} }
@@ -160,14 +160,14 @@ function parse (midiFile: Buffer): ChorusChartData | null {
         }
 
         if (diff && event.subtype === 9) {
-          if (previous) {
-            const distance = event.playTime - previous.time
+          if (previous[diff]) {
+            const distance = event.playTime - previous[diff].time
             if (distance > 0 && distance < 5) {
-              brokenNotes.push({ time: previous.time })
+              brokenNotes.push({ time: previous[diff].time })
             }
           }
 
-          if (!previous || previous.time !== event.playTime) { previous = { time: event.playTime } }
+          if (!previous[diff] || previous[diff].time !== event.playTime) { previous[diff] = { time: event.playTime } }
           if (!firstNoteTime) { firstNoteTime = event.playTime }
           if (event.playTime > lastNoteTime) { lastNoteTime = event.playTime }
           if (!notes[`${tracks[event.track]}.${diff}`]) { notes[`${tracks[event.track]}.${diff}`] = {} }
