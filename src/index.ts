@@ -86,13 +86,13 @@ async function init () {
 
   if (appArguments.dryRun) {
     await logger.log('Metadata not writen to disk, Application ran in dry mode')
-    await console.log('Metadata not writen to disk, Application ran in dry mode')
+    console.log('Metadata not writen to disk, Application ran in dry mode')
   } else {
     await writeFile(join(appArguments.outputDir, 'output.json'), JSON.stringify(output, null, 4))
     await logger.log('Metadata writen to disk, upload this to your ScoreSpy dashboard to make them downloadable via Chorus Encore')
     await logger.log(join(appArguments.outputDir, 'output.json'))
-    await console.log('Metadata writen to disk, upload this to your ScoreSpy dashboard to make them downloadable via Chorus Encore')
-    await console.log(join(appArguments.outputDir, 'output.json'))
+    console.log('Metadata writen to disk, upload this to your ScoreSpy dashboard to make them downloadable via Chorus Encore')
+    console.log(join(appArguments.outputDir, 'output.json'))
   }
 }
 
