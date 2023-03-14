@@ -229,7 +229,7 @@ function parse (chart: Buffer): ChorusChartData | null {
   let isLastNoteFound = false
   let currentIndex = -1
   let currentBpm = -1
-  Resolution = Number(Resolution)
+  Resolution = Number((chartData as any).chartMeta.Resolution)
 
   for (let i = 0; i < tempoMap.length; i++) {
     if (!tempoMap[i]) { continue }
