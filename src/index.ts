@@ -20,21 +20,9 @@ async function init () {
   if (isPackaged) {
     if (process.argv.length > 2) {
       const { argv } = yargs(process.argv.slice(2)).
-        option('baseDir', {
-          type: 'string',
-          description: 'The path to the base directory.',
-          demandOption: true
-        }).
-        option('outputDir', {
-          type: 'string',
-          description: 'The path to the output directory.',
-          demandOption: true
-        }).
-        option('dryRun', {
-          type: 'boolean',
-          description: 'Perform a dry run without actually copying files.',
-          default: false
-        }).
+        option('baseDir', { type: 'string', description: 'The path to the base directory.', demandOption: true }).
+        option('outputDir', { type: 'string', description: 'The path to the output directory.', demandOption: true }).
+        option('dryRun', { type: 'boolean', description: 'Perform a dry run without actually copying files.', default: false }).
         help().
         alias('help', 'h')
 
@@ -49,6 +37,14 @@ async function init () {
         outputDir: join(process.cwd(), 'CE'),
         dryRun: false
       }
+
+      console.log('\nRun again with CLI to manually specify parameters as shown below\n')
+      yargs().
+        option('baseDir', { type: 'string', description: 'The path to the base directory.' }).
+        option('outputDir', { type: 'string', description: 'The path to the output directory.' }).
+        option('dryRun', { type: 'boolean', description: 'Perform a dry run without actually copying files.' }).
+        alias('help', 'h').
+        showHelp()
 
       console.log('\n')
       console.log('baseDir: ', appArguments.baseDir)
