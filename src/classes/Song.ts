@@ -177,7 +177,7 @@ export default class Song {
     // write encrypted zip to disk
     const fileStream = createWriteStream(output)
     fileStream.write(iv.toString('binary'))
-    fileStream.write(encryptedBuffer.toString('binary'))
+    fileStream.write(encryptedBuffer)
     fileStream.end()
 
     return new Promise((resolve, reject) => {
