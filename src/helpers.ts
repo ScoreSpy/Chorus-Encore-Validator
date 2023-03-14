@@ -1,6 +1,7 @@
-import type { SongArchive } from './types'
 import { access, constants as FS_CONSTANTS, readdir, stat } from 'node:fs/promises'
+import { BinaryLike, createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
+import type { SongArchive } from './types'
 
 export function fileExists (path: string): Promise<boolean> {
   return access(path, FS_CONSTANTS.F_OK).then(() => true).catch(() => false)
@@ -35,4 +36,8 @@ export async function findSongs (rootDir: string, results: SongArchive[]): Promi
   }
 
   return results
+}
+
+export function createMD5 (data: BinaryLike) {
+  return createHash('md5').update(data).digest('hex')
 }
