@@ -1,5 +1,5 @@
 /* eslint-disable guard-for-in */
-import type { ChorusChartData, SongArchive, SongData } from '../types'
+import type { ChorusChartData, ChorusIni, SongArchive, SongData } from '../types'
 import { join, parse } from 'node:path'
 import * as formats from '../supportedFiles'
 import * as chalk from 'chalk'
@@ -12,6 +12,8 @@ export default class Song {
   baseDir: string
   files: string[]
   output: SongData = {
+    iniData: null as any,
+    chartData: null as any,
     files: {
       video: { highway: false, video: false },
       image: { album: false, background: false, highway: false },
@@ -107,9 +109,11 @@ export default class Song {
     return this.errors.length > 0
   }
 
-  private async parseIni () {
+  private async parseIni (): Promise<ChorusIni> {
     const data = await readFile(join(this.baseDir, this.iniFile))
-    parsers.parseIni(data)
+    const ini = parsers.parseIni(data)
+    if (ini === null) { throw new Error('ini read error') }
+    return ini
   }
 
   private async parseChart (): Promise<ChorusChartData> {
@@ -133,13 +137,13 @@ export default class Song {
     this.validate()
 
     try {
-      await this.parseIni()
+      this.output.iniData = await this.parseIni()
     } catch (error) {
       this.errors.push((error as Error).message)
     }
 
     try {
-      await this.parseChart()
+      this.output.chartData = await this.parseChart()
     } catch (error) {
       this.errors.push((error as Error).message)
     }
