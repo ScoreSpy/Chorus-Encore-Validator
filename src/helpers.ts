@@ -1,6 +1,7 @@
 import { access, constants as FS_CONSTANTS, readdir, stat } from 'node:fs/promises'
-import { BinaryLike, createHash } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
+import { BinaryLike, createHash } from 'node:crypto'
+import { createInterface } from 'node:readline'
 import type { SongArchive } from './types'
 
 export function fileExists (path: string): Promise<boolean> {
@@ -71,4 +72,23 @@ export function sanitizeFileName (fileName: string): string {
   if (invalidNames.test(sanitizedFileName)) { return 'invalid_file_name' }
 
   return sanitizedFileName
+}
+
+export function askQuestion (question: string, expected: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const rl = createInterface(process.stdin, process.stdout)
+    rl.question(`${question}\n`, (answer) => {
+      if (answer.toLowerCase() !== expected.toLowerCase()) { return reject(new Error('invalid input')) }
+      return resolve()
+    })
+  })
+}
+
+export function keyPress (): Promise<void> {
+  console.log('\nPress Any Key To Exit')
+  process.stdin.setRawMode(true)
+  return new Promise(() => process.stdin.once('data', () => {
+    console.log('\n^C')
+    process.exit(1)
+  }))
 }

@@ -134,3 +134,9 @@ export type SongData = {
     }
   }
 }
+
+export type ApplicationArguments = {
+  baseDir: string;
+  shadowDir: string;
+  dryRun: boolean;
+}
