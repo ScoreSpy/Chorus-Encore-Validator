@@ -61,3 +61,14 @@ export function replacePathPart (filePath: string, oldPart: string, newPart: str
   const newPath = join(newDir, base)
   return newPath
 }
+
+export function sanitizeFileName (fileName: string): string {
+  const invalidChars = /[<>:"/\\|?*\x00-\x1F]/ug
+  // eslint-disable-next-line prefer-named-capture-group
+  const invalidNames = /^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\..*)?$/ui
+  const sanitizedFileName = fileName.replace(invalidChars, '_')
+
+  if (invalidNames.test(sanitizedFileName)) { return 'invalid_file_name' }
+
+  return sanitizedFileName
+}

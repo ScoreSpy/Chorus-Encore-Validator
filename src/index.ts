@@ -1,5 +1,5 @@
 /* eslint-disable guard-for-in */
-import { fileExists, findSongs, replacePathPart } from './helpers'
+import { fileExists, findSongs, replacePathPart, sanitizeFileName } from './helpers'
 import Song from './classes/Song'
 import logger from './classes/logger'
 import { SongData } from './types'
@@ -29,7 +29,7 @@ async function init () {
       await mkdir(outputPath, { recursive: true })
     }
 
-    await song.createEncryptedArchive(join(outputPath, `${parse(song.baseDir).base}.ce`))
+    await song.createEncryptedArchive(join(outputPath, sanitizeFileName(`${parse(song.baseDir).base}.ce`)))
   }
 
   await writeFile('output.json', JSON.stringify(output, null, 4))
