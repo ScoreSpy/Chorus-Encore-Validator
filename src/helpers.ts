@@ -1,4 +1,5 @@
-import { access, constants as FS_CONSTANTS, readdir, stat } from 'node:fs/promises'
+import { constants as FS_CONSTANTS } from 'node:fs'
+import { access, readdir, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { BinaryLike, createHash } from 'node:crypto'
 import { createInterface } from 'node:readline'
