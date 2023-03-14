@@ -9,7 +9,7 @@
 import { createMD5 } from './../helpers'
 import type { ChorusChartData } from './../types'
 // @ts-ignore
-import MIDIFile from 'midifile'
+import * as MIDIFile from 'midifile'
 
 const SOLO_MARKER = 103
 const SP_MARKER = 116
@@ -218,10 +218,10 @@ function parse (midiFile: Buffer): ChorusChartData | null {
 }
 
 export default function parseMidi (midiFile: Buffer) {
-  try {
-    return parse(midiFile)
-  } catch (err) {
-    console.error(err)
-    return null
+  const data = parse(midiFile)
+  if (data?.hasBrokenNotes) {
+    throw new Error('Chart has broken notes')
   }
+
+  return data
 }

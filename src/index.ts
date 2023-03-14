@@ -8,6 +8,7 @@ async function init () {
 
   for (const result of results) {
     const song = new Song(result)
+    await song.validateSong()
   }
 }
 

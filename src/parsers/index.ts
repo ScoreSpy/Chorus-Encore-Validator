@@ -3,3 +3,4 @@ import parseIni from './ini'
 import parseMidi from './midi'
 
 export { parseChart, parseIni, parseMidi }
+export default { parseChart, parseIni, parseMidi }

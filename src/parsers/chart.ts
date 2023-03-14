@@ -100,11 +100,13 @@ function parse (chart: Buffer): ChorusChartData | null {
   }
 
   const utf8 = Iconv.decode(chartBuffer, 'utf8')
-  let chartString = utf8
+  const chartString = utf8
   if (utf8.indexOf('\u0000') >= 0) {
-    chartString = Iconv.decode(chart, 'utf16')
+    throw new Error('ini is not encoded in utf8 (utf16)')
+    // chartString = Iconv.decode(chart, 'utf16')
   } else if (utf8.indexOf('�') >= 0) {
-    chartString = Iconv.decode(chart, 'latin1')
+    throw new Error('ini is not encoded in utf8 (latin1)')
+    // chartString = Iconv.decode(chart, 'latin1')
   }
 
   // Trim each line because of Windows \r\n shenanigans
@@ -329,10 +331,10 @@ function parse (chart: Buffer): ChorusChartData | null {
 }
 
 export default function parseChart (midiFile: Buffer): ChorusChartData | null {
-  try {
-    return parse(midiFile)
-  } catch (err) {
-    console.error(err)
-    return null
+  const data = parse(midiFile)
+  if (data?.hasBrokenNotes) {
+    throw new Error('Chart has broken notes')
   }
+
+  return data
 }

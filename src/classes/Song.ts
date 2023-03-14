@@ -1,8 +1,10 @@
 /* eslint-disable guard-for-in */
-import type { SongArchive, SongData } from '../types'
-import { parse } from 'node:path'
+import type { ChorusChartData, SongArchive, SongData } from '../types'
+import { join, parse } from 'node:path'
 import * as formats from '../supportedFiles'
 import * as chalk from 'chalk'
+import parsers from './../parsers'
+import { readFile } from 'node:fs/promises'
 
 export default class Song {
   errors: string[]
@@ -19,16 +21,15 @@ export default class Song {
     }
   }
 
+  chartFile!: string
+  iniFile!: string
+
   constructor (data: SongArchive) {
     this.errors = []
     this.warnings = []
 
     this.baseDir = data.baseFolder
     this.files = data.files
-
-    this.setSupportedFiles()
-    this.validate()
-    this.printMessages()
   }
 
 
@@ -39,11 +40,18 @@ export default class Song {
       const FileExt = File.ext.toLocaleLowerCase()
 
       if (formats.SupportedChartNames.includes(FileName) && formats.SupportedChartFormats.includes(FileExt)) {
-        if (FileExt === '.mid') { this.output.files.chart.mid = true }
-        if (FileExt === '.chart') { this.output.files.chart.chart = true }
+        if (FileExt === '.chart') {
+          this.output.files.chart.chart = true
+          this.chartFile = file
+        }
+        if (FileExt === '.mid') {
+          this.output.files.chart.mid = true
+          this.chartFile = file
+        }
         continue
       } else if (formats.SupportedConfigNames.includes(FileName) && formats.SupportedConfigFormats.includes(FileExt)) {
         this.output.files.config.ini = true
+        this.iniFile = file
       } else if (formats.SupportedVideoNames.includes(FileName) && formats.SupportedVideoFormats.includes(FileExt)) {
         if (FileName === 'highway') { this.output.files.video.highway = true }
         if (FileName === 'video') { this.output.files.video.video = true }
@@ -97,5 +105,45 @@ export default class Song {
 
   get hasError (): boolean {
     return this.errors.length > 0
+  }
+
+  private async parseIni () {
+    const data = await readFile(join(this.baseDir, this.iniFile))
+    parsers.parseIni(data)
+  }
+
+  private async parseChart (): Promise<ChorusChartData> {
+    if (this.output.files.chart.mid) {
+      const data = await readFile(join(this.baseDir, this.chartFile))
+      const chart = parsers.parseMidi(data)
+      if (chart === null) { throw new Error('chart read error') }
+      return chart
+    } else if (this.output.files.chart.chart) {
+      const data = await readFile(join(this.baseDir, this.chartFile))
+      const chart = parsers.parseChart(data)
+      if (chart === null) { throw new Error('chart read error') }
+      return chart
+    }
+
+    throw new Error('invalid chart')
+  }
+
+  public async validateSong (): Promise<void> {
+    this.setSupportedFiles()
+    this.validate()
+
+    try {
+      await this.parseIni()
+    } catch (error) {
+      this.errors.push((error as Error).message)
+    }
+
+    try {
+      await this.parseChart()
+    } catch (error) {
+      this.errors.push((error as Error).message)
+    }
+
+    this.printMessages()
   }
 }
