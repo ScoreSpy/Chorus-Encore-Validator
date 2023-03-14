@@ -184,7 +184,8 @@ export default class Song {
 
     // write encrypted zip to disk
     const fileStream = createWriteStream(output)
-    fileStream.write(iv.toString('binary'))
+    const ivBuffer = Buffer.from(iv)
+    fileStream.write(ivBuffer)
     fileStream.write(encryptedBuffer)
     fileStream.end()
 

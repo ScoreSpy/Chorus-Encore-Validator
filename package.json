@@ -1,4 +1,5 @@
 {
+  "name": "chorus-encore-validator",
   "scripts": {
     "build": "npx tsc",
     "clean": "gts clean",
