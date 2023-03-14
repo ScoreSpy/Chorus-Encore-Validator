@@ -29,7 +29,7 @@ export async function findSongs (rootDir: string, results: SongArchive[]): Promi
 
       if (iniExists) {
         songFound = true
-        results.push({ baseFolder: dirPath })
+        results.push({ baseFolder: dirPath, files })
       }
     }
   }

@@ -1,9 +1,14 @@
+/* eslint-disable guard-for-in */
 import { findSongs } from './helpers'
+import Song from './classes/Song'
 
 async function init () {
   const results = await findSongs('C:\\Users\\Ahriana\\Downloads\\test', [])
-  console.log(results)
-  console.log(results.length)
+
+
+  for (const result of results) {
+    const song = new Song(result)
+  }
 }
 
 init()
