@@ -332,9 +332,11 @@ function parse (chart: Buffer): ChorusChartData | null {
 
 export default function parseChart (chartFile: Buffer): ChorusChartData | null {
   const data = parse(chartFile)
-  if (data?.hasBrokenNotes) {
-    throw new Error('Chart has broken notes')
-  }
+  /*
+   * if (data?.hasBrokenNotes) {
+   *   throw new Error('Chart has broken notes')
+   * }
+   */
 
   return data
 }

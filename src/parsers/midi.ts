@@ -217,10 +217,12 @@ function parse (midiFile: Buffer): ChorusChartData | null {
 }
 
 export default function parseMidi (midiFile: Buffer) {
-  const data = parse(midiFile)
-  if (data?.hasBrokenNotes) {
-    throw new Error('Chart has broken notes')
-  }
+  /*
+   * const data = parse(midiFile)
+   * if (data?.hasBrokenNotes) {
+   *   throw new Error('Chart has broken notes')
+   * }
+   */
 
   return data
 }
