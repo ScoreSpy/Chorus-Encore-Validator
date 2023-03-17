@@ -1,16 +1,17 @@
 /* eslint-disable guard-for-in */
+import { createCipheriv, randomBytes } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
+import { hashFile } from './../helpers'
 import { join, parse } from 'node:path'
+import { NotesData } from '../types/notes-data'
 import { readFile } from 'node:fs/promises'
 import * as formats from '../supportedFiles'
 import chalk from 'chalk'
+import cryptoConfig from './../config/crypto.json'
 import JSZip from 'jszip'
 import logger from './logger'
 import parsers from './../parsers'
 import type { ChorusIni, SongArchive, SongData } from '../types/chorus'
-import { createCipheriv, randomBytes } from 'node:crypto'
-import cryptoConfig from './../config/crypto.json'
-import { NotesData } from '../types/notes-data'
 
 export default class Song {
   errors: string[]
@@ -18,7 +19,9 @@ export default class Song {
   baseDir: string
   files: string[]
   output: SongData = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     iniData: null as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     chartData: null as any,
     files: {
       video: { highway: false, video: false },
@@ -26,7 +29,9 @@ export default class Song {
       stems: { guitar: false, bass: false, rhythm: false, vocals: false, vocals_1: false, vocals_2: false, drums: false, drums_1: false, drums_2: false, drums_3: false, drums_4: false, keys: false, song: false, crowd: false },
       chart: { mid: false, chart: false },
       config: { ini: false }
-    }
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    checksums: { archive: null as any, chart: { mid: null, chart: null } }
   }
 
   chartFile!: string
@@ -154,11 +159,15 @@ export default class Song {
 
     if (this.output.iniData.delay && this.output.iniData.delay !== '0') { this.warnings.push(`ini "delay" value unexpected: ${this.output.iniData.delay} (0)`) }
     if (this.output.iniData.hopo_frequency && this.output.iniData.hopo_frequency !== '1') { this.errors.push(`ini "hopo_frequency" value unexpected: ${this.output.iniData.hopo_frequency} (0)`) }
+
     /*
      * if (this.output.iniData.multiplier_note && this.output.iniData.multiplier_note !== '0') { this.warnings.push(`ini "multiplier_note" value unexpected: ${this.output.iniData.multiplier_note} (0)`) }
      * if (this.output.iniData.sustain_cutoff_threshold && this.output.iniData.sustain_cutoff_threshold !== '0') { this.warnings.push(`ini "sustain_cutoff_threshold" value unexpected: ${this.output.iniData.sustain_cutoff_threshold} (0)`) }
      * if (this.output.iniData.end_events && this.output.iniData.end_events !== '0') { this.warnings.push(`ini "end_events" value unexpected: ${this.output.iniData.end_events} (0)`) }
      */
+
+    if (this.output.files.chart.mid) { this.output.checksums.chart.mid = await hashFile(join(this.baseDir, this.chartFile)) }
+    if (this.output.files.chart.chart) { this.output.checksums.chart.mid = await hashFile(join(this.baseDir, this.chartFile)) }
 
     try {
       this.output.chartData = await this.parseChart()

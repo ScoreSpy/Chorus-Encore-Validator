@@ -58,6 +58,13 @@ export type ChorusIni = {
 export type SongData = {
   iniData: ChorusIni,
   chartData: NotesData,
+  checksums: {
+    chart: {
+      mid: string | null,
+      chart: string | null,
+    },
+    archive: string
+  }
   files: {
     video: {
       highway: boolean,

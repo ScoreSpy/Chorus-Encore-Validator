@@ -1,4 +1,4 @@
-import { access, readdir, stat } from 'node:fs/promises'
+import { access, readdir, readFile, stat } from 'node:fs/promises'
 import { BinaryLike, createHash } from 'node:crypto'
 import { constants as FS_CONSTANTS } from 'node:fs'
 import { createInterface } from 'node:readline'
@@ -51,6 +51,11 @@ export async function findSongs (rootDir: string, results: SongArchive[]): Promi
 
 export function createMD5 (data: BinaryLike) {
   return createHash('md5').update(data).digest('hex')
+}
+
+export async function hashFile (path: string): Promise<string> {
+  const data = await readFile(path)
+  return createMD5(data)
 }
 
 export function getFilesafeTimestamp () {

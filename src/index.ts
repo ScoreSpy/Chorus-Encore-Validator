@@ -1,6 +1,6 @@
 /* eslint-disable guard-for-in */
 import './shim'
-import { askQuestion, fileExists, findSongs, isFile, keyPress, replacePathPart, sanitizeFileName } from './helpers'
+import { askQuestion, fileExists, findSongs, hashFile, isFile, keyPress, replacePathPart, sanitizeFileName } from './helpers'
 import { join, parse } from 'node:path'
 import { mkdir, writeFile } from 'node:fs/promises'
 import bridgeToChorusConverter from './bridgeToChorusConverter'
@@ -102,10 +102,14 @@ async function init () {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (data as any).chartData = bridgeToChorusConverter(data.chartData)
 
-    output.push(data)
     const outputPath = replacePathPart(parse(song.baseDir).dir, appArguments.baseDir, appArguments.outputDir)
     if (!await fileExists(outputPath)) { await mkdir(outputPath, { recursive: true }) }
-    await song.createEncryptedArchive(join(outputPath, sanitizeFileName(`${parse(song.baseDir).base}.ce`)))
+
+    const outputFileName = join(outputPath, sanitizeFileName(`${parse(song.baseDir).base}.ce`))
+    await song.createEncryptedArchive(outputFileName)
+    data.checksums.archive = await hashFile(outputFileName)
+
+    output.push(data)
   }
 
   if (appArguments.dryRun) {
