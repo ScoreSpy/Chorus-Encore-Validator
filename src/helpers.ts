@@ -1,8 +1,9 @@
-import { constants as FS_CONSTANTS } from 'node:fs'
 import { access, readdir, stat } from 'node:fs/promises'
-import { dirname, join, normalize } from 'node:path'
 import { BinaryLike, createHash } from 'node:crypto'
+import { constants as FS_CONSTANTS } from 'node:fs'
 import { createInterface } from 'node:readline'
+import { default as detect } from 'charset-detector'
+import { dirname, join, normalize } from 'node:path'
 import type { SongArchive } from './types'
 
 export function fileExists (path: string): Promise<boolean> {
@@ -96,4 +97,17 @@ export function keyPress (): Promise<void> {
     console.log('\n^C')
     process.exit(1)
   }))
+}
+
+export function getEncoding (buffer: Buffer) {
+  const matchingCharset = detect(buffer)[0]
+  switch (matchingCharset.charsetName) {
+  case 'UTF-8': return 'utf8'
+  case 'ISO-8859-1': return 'latin1'
+  case 'ISO-8859-2': return 'latin1'
+  case 'ISO-8859-9': return 'utf8'
+  case 'windows-1252': return 'utf8'
+  case 'UTF-16LE': return 'utf16le'
+  default: return 'utf8'
+  }
 }

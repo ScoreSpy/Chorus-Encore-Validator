@@ -1,228 +1,489 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
-// @ts-nocheck
-
-/*
- * Ported and updated from https://github.com/Paturages/chorus/blob/master/src/utils/meta/midi.js with permission from Paturages
- * this needs to be typed out correctly... hopefully not by me
- */
-
-import { createMD5 } from './../helpers'
-import type { ChorusChartData } from './../types'
+/* eslint-disable no-warning-comments */
+/* eslint-disable no-nested-ternary */
+/* eslint-disable default-case */
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
+/* eslint-disable no-use-before-define */
+/* eslint-disable max-classes-per-file */
+import { createHash } from 'crypto'
+import { readFile } from 'fs/promises'
+import _ from 'lodash'
+import { EVENT_DIVSYSEX, EVENT_META, EVENT_META_SET_TEMPO, EVENT_META_TIME_SIGNATURE, EVENT_META_TRACK_NAME, EVENT_MIDI, EVENT_MIDI_NOTE_ON, EVENT_SYSEX, MIDIEvent } from 'midievents'
 import MIDIFile from 'midifile'
 
-const SOLO_MARKER = 103
-const SP_MARKER = 116
+import { Difficulty, Instrument, NoteIssue, NoteIssueType, NotesData, TrackIssueType } from './../types/notes-data'
 
-const FORCED_HOPO_E = 65
-const FORCED_STRUM_E = 66
+const LEADING_SILENCE_THRESHOLD_MS = 1000
+const MIN_SUSTAIN_GAP_MS = 40
+// const MIN_SUSTAIN_MS = 100 TODO: unchecked for now because determining this in .mid is complicated
+const NPS_GROUP_SIZE_MS = 1000
 
-const FORCED_HOPO_M = 77
-const FORCED_STRUM_M = 78
-
-const FORCED_HOPO_H = 89
-const FORCED_STRUM_H = 90
-
-const FORCED_HOPO_X = 101
-const FORCED_STRUM_X = 102
-
-const partMap = {
+/* eslint-disable @typescript-eslint/naming-convention */
+type TrackName = InstrumentName | 'PART VOCALS' | 'EVENTS'
+type InstrumentName = keyof typeof instrumentNameMap
+const instrumentNameMap = {
   'PART GUITAR': 'guitar',
-  'PART BASS': 'bass',
   'PART RHYTHM': 'rhythm',
-  'PART KEYS': 'keys',
+  'PART BASS': 'bass',
   'PART DRUMS': 'drums',
-  'PART VOCALS': 'vocals',
+  'PART KEYS': 'keys',
   'PART GUITAR GHL': 'guitarghl',
   'PART BASS GHL': 'bassghl'
+} as const
+/* eslint-enable @typescript-eslint/naming-convention */
+
+enum EventType {
+  starPower,
+  tap,
+  force,
+  orange,
+  blue,
+  yellow,
+  red,
+  green,
+  open,
+  soloMarker,
+
+  // 6 fret
+  black3,
+  black2,
+  black1,
+  white3,
+  white2,
+  white1,
+
+  // Drums
+  activationLane,
+  kick,
+  kick2x,
 }
-// eslint-disable-next-line id-length
-const diffOffsets = { e: 59, m: 71, h: 83, x: 95 }
 
-function parse (midiFile: Buffer): ChorusChartData | null {
-  const midi = new MIDIFile(Buffer.from(midiFile))
-  let isOpen = false
-  let firstNoteTime = -1
-  let lastNoteTime = 0
-  const previous = {}
-  const tracks = {}
-  const notes = {}
+interface TrackEventEnd {
+  difficulty: Difficulty | null
+  time: number
+  type: EventType | null
+  isStart: boolean
+}
 
-  const brokenNotes: {
-    time: number
-    nextTime?: number
-  }[] = []
+interface TrackEvent {
+  difficulty: Difficulty
+  time: number
+  type: EventType
+  endTime: number
+}
 
-  const chartData: ChorusChartData = {
-    hasSections: false,
-    hasStarPower: false,
-    hasForced: false,
-    hasSoloSections: false,
-    hasTap: false,
-    hasOpen: { },
-    noteCounts: { },
-    is120: false,
-    hasLyrics: false,
-    hashes: {
-      file: createMD5(Buffer.from(midiFile))
-    },
-    hasBrokenNotes: false,
-    chartMeta: {
-      length: -1,
-      effectiveLength: -1
-    }
+const sysExDifficultyMap = ['easy', 'medium', 'hard', 'expert'] as const
+const fiveFretDiffStarts = { easy: 59, medium: 71, hard: 83, expert: 95 }
+const sixFretDiffStarts = { easy: 58, medium: 70, hard: 82, expert: 94 }
+const drumsDiffStarts = { easy: 60, medium: 72, hard: 84, expert: 96 }
+
+class TrackParser {
+  private instrument: Instrument
+  // @ts-ignore
+  private difficulty: Difficulty
+
+  private ungroupedNotes: TrackEvent[]
+  private groupedNotes: { time: number; type: EventType[] }[]
+
+  private noteIssues: NoteIssue[] = []
+  private trackIssues: TrackIssueType[] = []
+
+  constructor (private notesData: NotesData, track: { instrument: Instrument; difficulty: Difficulty; trackEvents: TrackEvent[] }) {
+    this.instrument = track.instrument
+
+    if (!notesData.instruments.includes(this.instrument)) { notesData.instruments.push(this.instrument) }
+
+    this.ungroupedNotes = track.trackEvents
+
+    this.groupedNotes = _.chain(this.ungroupedNotes).
+      groupBy((note) => note?.time).
+      values().
+      map((noteGroup) => ({
+        time: noteGroup[0].time,
+        type: noteGroup.map((note) => note.type!)
+      })).
+      value()
   }
 
-  // Detect 120 BPM charts because fuck that shit seriously
-  const bpmEvents = midi.getTrackEvents(0).filter(({ tempoBPM }) => tempoBPM)
-  chartData.is120 = bpmEvents.length === 1 && bpmEvents[0].tempoBPM === 120
+  public get firstNote () { return _.first(this.groupedNotes) ?? null }
+  public get lastNote () { return _.last(this.groupedNotes) ?? null }
 
-  midi.getEvents().forEach((event) => {
-    /*
-     * Data is a string attached to the MIDI event.
-     * It generally denotes chart events (sections, lighting...)
-     */
-    const data = event.data ? event.data.map((dta) => String.fromCharCode(dta)).join('') : null
+  private addNoteIssue (issueType: NoteIssueType, time: number) { this.noteIssues.push({ issueType, tick: 0, time }) }
+  private addTrackIssue (issueType: TrackIssueType) { this.trackIssues.push(issueType) }
 
-    // Let's hope I'm not wrong
-    if (event.param1 === SOLO_MARKER) {
-      chartData.hasSoloSections = true
-    // eslint-disable-next-line prefer-named-capture-group
-    } else if (data && data.match(/^\[(section|prc)/u)) { // Prc? different standards for .mids smh, that's most likely from RB though
-      chartData.hasSections = true
-    } else if (data && partMap[data]) {
-      if (data.trim() === 'PART VOCALS') { // CH lyrics take from the vocals part
-        chartData.hasLyrics = true
-      }
-      tracks[event.track] = partMap[data]
-    } else if (data === 'PS\u0000\u0000ÿ\u0004\u0001÷') { // If that ain't black magic, I don't know what it is. But it works.
-      chartData.hasTap = true
-    } else if (data === 'PS\u0000\u0000\u0003\u0001\u0001÷') {
-      chartData.hasOpen[tracks[event.track]] = true
-      isOpen = true
-    } else if (data === 'PS\u0000\u0000\u0003\u0001\u0000÷') { isOpen = false }
-
-    /*
-     * Param1 is the note being played.
-     * The interesting things happen here...
-     */
-    if (event.param1 && event.param1 !== SOLO_MARKER) {
-      if (event.param1 === SP_MARKER) {
-        chartData.hasStarPower = true
-      } else if ([FORCED_HOPO_E, FORCED_STRUM_E, FORCED_HOPO_M, FORCED_STRUM_M, FORCED_HOPO_H, FORCED_STRUM_H, FORCED_HOPO_X, FORCED_STRUM_X].indexOf(event.param1) > -1) {
-        chartData.hasForced = true
-      } else if (tracks[event.track] !== 'guitarghl' && tracks[event.track] !== 'bassghl') {
-        // Detect which difficulty the note is on
-        let diff: string = null
-        if (event.param1 >= 60 && event.param1 <= 64) {
-          diff = 'e'
-        } else if (event.param1 >= 72 && event.param1 <= 76) {
-          diff = 'm'
-        } else if (event.param1 >= 84 && event.param1 <= 88) {
-          diff = 'h'
-        } else if (event.param1 >= 96 && event.param1 <= 100) {
-          diff = 'x'
-        }
-
-        /*
-         * Event.subtype == 9 is the note being on,
-         * event.subtype == 8 is the note being off... I think?
-         */
-        if (diff && event.subtype === 9) {
-          /*
-           * Broken note logic
-           * Check chart.js for the logic behind broken notes,
-           * I can't be bothered to copy/paste/adapt
-           */
-          if (previous[diff]) {
-            const distance = event.playTime - previous[diff].time
-            if (distance > 0 && distance < 5) {
-              brokenNotes.push({ time: previous[diff].time, nextTime: event.playTime })
-            }
-          }
-          if (!previous[diff] || previous[diff].time !== event.playTime) { previous[diff] = { time: event.playTime } }
-          if (!firstNoteTime) { firstNoteTime = event.playTime }
-          if (event.playTime > lastNoteTime) { lastNoteTime = event.playTime }
-          if (!notes[`${tracks[event.track]}.${diff}`]) { notes[`${tracks[event.track]}.${diff}`] = {} }
-          notes[`${tracks[event.track]}.${diff}`][event.playTime] = `${notes[`${tracks[event.track]}.${diff}`][event.playTime] || ''}${isOpen ? 7 : event.param1 - diffOffsets[diff]}`
-        }
-      } else {
-        // Detect which difficulty the note is on
-        let diff: string = null
-        if (event.param1 >= 94) {
-          diff = 'x'
-        } else if (event.param1 >= 82) {
-          diff = 'h'
-        } else if (event.param1 >= 70) {
-          diff = 'm'
-        } else if (event.param1) {
-          diff = 'e'
-        }
-
-        if (diff && event.subtype === 9) {
-          if (previous[diff]) {
-            const distance = event.playTime - previous[diff].time
-            if (distance > 0 && distance < 5) {
-              brokenNotes.push({ time: previous[diff].time })
-            }
-          }
-
-          if (!previous[diff] || previous[diff].time !== event.playTime) { previous[diff] = { time: event.playTime } }
-          if (!firstNoteTime) { firstNoteTime = event.playTime }
-          if (event.playTime > lastNoteTime) { lastNoteTime = event.playTime }
-          if (!notes[`${tracks[event.track]}.${diff}`]) { notes[`${tracks[event.track]}.${diff}`] = {} }
-
-          // GHL notes are offset by 2. If the ensuing result equals 0, it's an open note.
-          notes[`${tracks[event.track]}.${diff}`][event.playTime] = `${notes[`${tracks[event.track]}.${diff}`][event.playTime] || ''}${Number(event.param1 - diffOffsets[diff] + 1) || 7}`
-        }
-      }
+  public parseTrack () {
+    if (this.instrument === 'drums') {
+      this.parseDrumTrack()
+    } else {
+      this.parseNonDrumTrack()
     }
-  })
 
-  // Compute the hash of the .mid itself first
-  let earliestNote = Number(Infinity)
-  let latestNote = 0
-
-  // eslint-disable-next-line guard-for-in
-  for (const part in notes) {
-    const [instrument, difficulty] = part.split('.')
-
-    // We have to reorder the values by ascending index (Object.values gets by "alphabetical" order of index)
-    // eslint-disable-next-line no-loop-func, id-length
-    const notesArray = Object.keys(notes[part]).sort((a, b) => (Number(a) < Number(b) ? -1 : 1)).map((index) => {
-      const indexNumber = Number(index)
-      if (indexNumber < earliestNote) { earliestNote = indexNumber }
-      if (indexNumber > latestNote) { latestNote = indexNumber }
-      return notes[part][indexNumber]
+    // Add notes hash
+    this.notesData.hashes.push({
+      instrument: this.instrument,
+      difficulty: this.difficulty,
+      hash: createHash('md5').update(this.ungroupedNotes.map((n) => `${n.time}_${n.type}`).join('')).digest('hex')
     })
 
-    // Ignore tracks with less than 10 notes
-    if (notesArray.length < 10) { continue }
+    // Add note count
+    this.notesData.noteCounts.push({ instrument: this.instrument, difficulty: this.difficulty, count: this.groupedNotes.length })
 
-    if (!chartData.hashes[instrument]) {
-      chartData.hashes[instrument] = {}
-      chartData.noteCounts[instrument] = {}
+    // Check for broken notes (note: false positives are possible)
+    for (let i = 1; i < this.groupedNotes.length; i++) {
+      const distance = this.groupedNotes[i].time - this.groupedNotes[i - 1].time
+      if (distance > 0 && distance < 5) {
+        this.addNoteIssue('brokenNote', this.groupedNotes[i].time)
+      }
     }
 
-    // Compute the hashes and note counts of individual difficulties/instruments
-    chartData.noteCounts[instrument][difficulty] = notesArray.length
-    chartData.hashes[instrument][difficulty] = createMD5(notesArray.join(' '))
-    if (typeof chartData.hasOpen[instrument] === 'undefined') { chartData.hasOpen[instrument] = false }
+    if (this.noteIssues.length) {
+      this.notesData.noteIssues.push({ instrument: this.instrument, difficulty: this.difficulty, noteIssues: this.noteIssues })
+    }
+    if (this.trackIssues.length) {
+      this.notesData.trackIssues.push({ instrument: this.instrument, difficulty: this.difficulty, trackIssues: this.trackIssues })
+    }
   }
 
-  chartData.hasBrokenNotes = Boolean(brokenNotes.length)
-  chartData.chartMeta.length = lastNoteTime / 1000 >> 0
-  chartData.chartMeta.effectiveLength = (lastNoteTime - firstNoteTime) / 1000 >> 0
+  private parseDrumTrack () {
+    let trackHasStarPower = false
+    let trackHasActivationLanes = false
+    // Check for drum note type properties
+    for (const event of this.ungroupedNotes) {
+      if (event.type === EventType.starPower) { trackHasStarPower = true }
+      if (event.type === EventType.soloMarker) { trackHasStarPower = true } // This is to support GH1/GH2 charts
+      if (event.type === EventType.activationLane) { trackHasActivationLanes = true }
+      if (event.type === EventType.kick2x) { this.notesData.has2xKick = true }
+    }
+    // Check for three-note drum chords (not including kicks)
+    for (const note of this.groupedNotes) {
+      const nonKickDrumNoteIds = [EventType.green, EventType.red, EventType.yellow, EventType.blue, EventType.orange]
+      if (_.sumBy(nonKickDrumNoteIds, (id) => (note.type.includes(id) ? 1 : 0)) >= 3) {
+        this.addNoteIssue('threeNoteDrumChord', note.time)
+      }
+    }
+    if (!trackHasStarPower) { this.addTrackIssue('noStarPower') }
+    if (!trackHasActivationLanes) { this.addTrackIssue('noDrumActivationLanes') }
+  }
 
-  return chartData
+  private parseNonDrumTrack () {
+    let trackHasStarPower = false
+    // Check for guitar note type properties
+    for (const event of this.ungroupedNotes) {
+      if (event.type === EventType.soloMarker) { this.notesData.hasSoloSections = true }
+      if (event.type === EventType.force) { this.notesData.hasForcedNotes = true }
+      if (event.type === EventType.open) { this.notesData.hasOpenNotes = true }
+      if (event.type === EventType.starPower) { trackHasStarPower = true }
+      if (event.type === EventType.tap) { this.notesData.hasTapNotes = true }
+    }
+    // Check for sustain properties
+    this.setSustainProperties()
+    // Calculate NPS properties
+    this.setNpsProperties()
+    if (this.instrument !== 'guitarghl' && this.instrument !== 'bassghl') {
+      const fiveNoteChordIds = [EventType.green, EventType.red, EventType.yellow, EventType.blue, EventType.orange]
+      const greenBlueChordIds = [EventType.green, EventType.blue]
+      const redOrangeChordIds = [EventType.red, EventType.orange]
+      const greenOrangeChordIds = [EventType.green, EventType.orange]
+      const openIds = [EventType.open]
+      const openOrangeIds = [EventType.open, EventType.orange]
+      const openOrangeBlueIds = [EventType.open, EventType.orange, EventType.blue]
+      for (const note of this.groupedNotes) {
+        // Check for five-note chords
+        if (fiveNoteChordIds.every((id) => note.type.includes(id))) {
+          this.addNoteIssue('fiveNoteChord', note.time)
+        }
+        // Check for notes forbidden on lower difficulties
+        if (this.difficulty === 'hard') {
+          if (openIds.some((id) => note.type.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+          if (greenBlueChordIds.every((id) => note.type.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+          if (redOrangeChordIds.every((id) => note.type.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+          if (greenOrangeChordIds.every((id) => note.type.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+        } else if (this.difficulty === 'medium') {
+          if (openOrangeIds.some((id) => note.type.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+          if (greenBlueChordIds.every((id) => note.type.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+        } else if (this.difficulty === 'easy') {
+          if (openOrangeBlueIds.some((id) => note.type.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+        }
+      }
+    }
+    if (!trackHasStarPower) { this.addTrackIssue('noStarPower') }
+  }
+
+  private setSustainProperties () {
+    /** Sustain gaps at the end of notes already checked in the for loop. `startTick` is inclusive, `endTick` is exclusive. */
+    const futureSustainGaps: { startTime: number; endTime: number }[] = []
+    for (const note of this.ungroupedNotes) {
+      _.remove(futureSustainGaps, (r) => r.endTime <= note.time)
+      if (futureSustainGaps.find((r) => note.time >= r.startTime && note.time < r.endTime)) {
+        this.addNoteIssue('badSustainGap', note.time)
+      }
+      if (note.time !== note.endTime) {
+        futureSustainGaps.push({
+          startTime: note.endTime,
+          endTime: note.endTime + MIN_SUSTAIN_GAP_MS
+        })
+      }
+    }
+  }
+
+  private setNpsProperties () {
+    /** The list of ticks that contain previous notes that are within `NPS_GROUP_SIZE_MS` milliseconds of `note`. */
+    const recentNoteTicks: number[] = []
+    let highestNpsNote = { noteCount: 1, note: this.groupedNotes[0] }
+    for (const note of this.groupedNotes) {
+      _.remove(recentNoteTicks, (r) => r <= note.time - NPS_GROUP_SIZE_MS)
+      recentNoteTicks.push(note.time)
+      if (highestNpsNote.noteCount < recentNoteTicks.length) {
+        highestNpsNote = { noteCount: recentNoteTicks.length, note }
+      }
+    }
+
+    this.notesData.maxNps.push({
+      instrument: this.instrument,
+      difficulty: this.difficulty,
+      nps: (highestNpsNote.noteCount * 1000) / NPS_GROUP_SIZE_MS,
+      tick: 0,
+      time: highestNpsNote.note.time
+    })
+  }
 }
 
-export default function parseMidi (midiFile: Buffer) {
-  const data = parse(midiFile)
-  /*
-   * if (data?.hasBrokenNotes) {
-   *   throw new Error('Chart has broken notes')
-   * }
-   */
+class MidiParser {
+  private notesData: NotesData
 
-  return data
+  private tempoMap: MIDIEvent[] = []
+  private tracks: { trackIndex: number; trackName: TrackName; trackEvents: MIDIEvent[] }[]
+  private splitTracks: { instrument: Instrument; difficulty: Difficulty; trackEvents: TrackEvent[] }[]
+
+  constructor (private midiFile: MIDIFile) {
+    this.notesData = {
+      instruments: [],
+      hasSoloSections: false,
+      hasLyrics: false,
+      hasForcedNotes: false,
+      hasTapNotes: false,
+      hasOpenNotes: false,
+      has2xKick: false,
+      noteIssues: [],
+      trackIssues: [],
+      chartIssues: [],
+      noteCounts: [],
+      maxNps: [],
+      hashes: [],
+      tempoMapHash: '',
+      tempoMarkerCount: 0,
+      length: 0,
+      effectiveLength: 0
+    }
+
+    const trackNameEvents: MIDIEvent[] = []
+    const trackEvents: MIDIEvent[][] = []
+
+    const allEvents = midiFile.getEvents()
+    for (const midiEvent of allEvents) {
+      midiEvent.playTime = _.round(midiEvent.playTime ?? -1, 3)
+
+      switch (midiEvent.type) {
+      case EVENT_META: {
+        switch (midiEvent.subtype) {
+        case EVENT_META_TRACK_NAME: trackNameEvents.push(midiEvent); break
+        case EVENT_META_SET_TEMPO: this.tempoMap.push(midiEvent); break
+        case EVENT_META_TIME_SIGNATURE: break
+        }
+        break
+      }
+      case EVENT_SYSEX:
+      case EVENT_DIVSYSEX: {
+        (trackEvents[midiEvent.track!] ??= []).push(midiEvent)
+        break
+      }
+      case EVENT_MIDI: {
+        (trackEvents[midiEvent.track!] ??= []).push(midiEvent)
+        break
+      }
+      }
+    }
+
+    this.tracks = trackNameEvents.map((event) => ({
+      trackIndex: event.track!,
+      trackName: event.data.map((dta) => String.fromCharCode(dta)).join('').trim() as TrackName,
+      trackEvents: trackEvents[event.track!]
+    }))
+
+    this.splitTracks = _.chain(this.tracks).
+      filter((t) => _.keys(instrumentNameMap).includes(t.trackName)).
+      map((t) => {
+        const instrument = instrumentNameMap[t.trackName as InstrumentName]
+        const trackEventGroups = _.chain(t.trackEvents).
+          map((te) => this.getTrackEventEnds(te, instrument)).
+          filter((te) => te.type !== null).
+          orderBy((te) => te.time).
+          thru((te) => this.getTrackEvents(te)).
+          orderBy((te) => te.time).
+          groupBy((te) => te.difficulty).
+          toPairs().
+          value()
+        const instrumentEvents = _.remove(trackEventGroups, (g) => g[0] === null)[0][1] // Pull out instrument-wide events
+        trackEventGroups.forEach((g) => g[1].push(...instrumentEvents)) // ... and add each one to all difficulties
+
+        return trackEventGroups.map((g) => ({ instrument, difficulty: g[0] as Difficulty, trackEvents: g[1] }))
+      }).
+      flatMap().
+      value()
+  }
+
+  private getTrackEventEnds (event: MIDIEvent, instrument: Instrument): TrackEventEnd {
+    // SysEx event (tap modifier or open)
+    const eventData = event.data.map((dta) => String.fromCharCode(dta))
+    if (event.type === EVENT_SYSEX || event.type === EVENT_DIVSYSEX) {
+      if (eventData[0] === 'P' && eventData[1] === 'S' && eventData[2] === '\0' && event.data[3] === 0x00) {
+        // Phase Shift SysEx event
+        return {
+          difficulty: sysExDifficultyMap[event.data[4]],
+          time: event.playTime!,
+          type: event.data[5] === 0x01 ? EventType.open : event.data[5] === 0x04 ? EventType.tap : null,
+          isStart: event.data[6] === 0x00
+        }
+      }
+    }
+
+    const note = event.param1!
+    const difficulty = note <= 66 ? 'easy' : note <= 78 ? 'medium' : note <= 90 ? 'hard' : note <= 102 ? 'expert' : null
+    // Instrument event (solo marker, star power, activation lane) (applies to all difficulties)
+    if (!difficulty) {
+      return {
+        difficulty,
+        time: event.playTime!,
+        type: note === 103 ? EventType.soloMarker : note === 116 ? EventType.starPower : note >= 120 && note <= 124 ? EventType.activationLane : null,
+        isStart: event.data[6] === 0x00
+      }
+    }
+
+    return {
+      difficulty,
+      time: event.playTime!,
+      type: (instrument === 'guitarghl' || instrument === 'bassghl' ? this.get6FretNoteType(note, difficulty) : instrument === 'drums' ? this.getDrumsNoteType(note, difficulty) : this.get5FretNoteType(note, difficulty)) ?? null,
+      isStart: event.subtype === EVENT_MIDI_NOTE_ON
+    }
+  }
+
+  private get5FretNoteType (note: number, difficulty: Difficulty) {
+    switch (note - fiveFretDiffStarts[difficulty]) {
+    case 1: return EventType.green
+    case 2: return EventType.red
+    case 3: return EventType.yellow
+    case 4: return EventType.blue
+    case 5: return EventType.orange
+    case 6: return EventType.force
+    case 7: return EventType.force
+    default: throw new Error('Missing EventType')
+    }
+  }
+
+  private get6FretNoteType (note: number, difficulty: Difficulty) {
+    switch (note - sixFretDiffStarts[difficulty]) {
+    case 0: return EventType.open
+    case 1: return EventType.white1
+    case 2: return EventType.white2
+    case 3: return EventType.white3
+    case 4: return EventType.black1
+    case 5: return EventType.black2
+    case 6: return EventType.black3
+    case 7: return EventType.force
+    case 8: return EventType.force
+    default: throw new Error('Missing EventType')
+    }
+  }
+
+  private getDrumsNoteType (note: number, difficulty: Difficulty) {
+    switch (note - drumsDiffStarts[difficulty]) {
+    case -1: return EventType.kick2x
+    case 0: return EventType.kick
+    case 1: return EventType.red
+    case 2: return EventType.yellow
+    case 3: return EventType.blue
+    case 4: return EventType.orange
+    case 5: return EventType.green
+    default: throw new Error('Missing EventType')
+    }
+  }
+
+  private getTrackEvents (trackEventEnds: TrackEventEnd[]) {
+    const trackEvents: TrackEvent[] = []
+    const lastTrackEventEnds: Partial<{ [type in EventType]: TrackEventEnd }> = {}
+    for (const trackEventEnd of trackEventEnds) {
+      const lastTrackEventEnd = lastTrackEventEnds[trackEventEnd.type!]
+      if (trackEventEnd.isStart) {
+        lastTrackEventEnds[trackEventEnd.type!] = trackEventEnd
+      } else if (lastTrackEventEnd) {
+        trackEvents.push({
+          difficulty: trackEventEnd.difficulty!,
+          time: lastTrackEventEnd.time,
+          endTime: trackEventEnd.time,
+          type: lastTrackEventEnd.type!
+        })
+      }
+    }
+    return trackEvents
+  }
+
+  parse (): NotesData {
+    let globalFirstNote: { time: number; type: EventType[] } | null = null
+    let globalLastNote: { time: number; type: EventType[] } | null = null
+
+    for (const track of this.splitTracks) {
+      const trackParser = new TrackParser(this.notesData, track)
+
+      trackParser.parseTrack()
+
+      globalFirstNote = _.minBy([globalFirstNote, trackParser.firstNote], (note) => note?.time ?? Infinity) ?? null
+      globalLastNote = _.maxBy([globalLastNote, trackParser.lastNote], (note) => note?.time ?? -Infinity) ?? null
+    }
+    if (globalFirstNote === null || globalLastNote === null) {
+      this.notesData.chartIssues.push('noNotes')
+      return this.notesData
+    }
+
+    if (this.tracks.find((t) => t.trackName === 'PART VOCALS')?.trackEvents.length) { this.notesData.hasLyrics = true }
+
+    const sectionEvents = _.chain(this.tracks.find((t) => t.trackName === 'EVENTS')?.trackEvents ?? []).
+      map((ete) => ete.data.map((dta) => String.fromCharCode(dta)).join('')).
+      filter((name) => name.includes('[section') || name.includes('[prc_')).
+      value()
+    if (!sectionEvents.length) { this.notesData.chartIssues.push('noSections') }
+
+    this.notesData.tempoMapHash = createHash('md5').update(this.midiFile.header.getTickResolution() +
+      this.tempoMap.map((t) => `${t.playTime}_${t.tempoBPM}`).join(':')).digest('hex')
+    this.notesData.tempoMarkerCount = this.tempoMap.length + 1 // .mid has an implied starting marker defined in the header
+
+    /*
+     * TODO
+     * if (this.tempoMap.length === 0 && this.midiFile.header.getTickResolution() === ??? && this.timeSignatures.length === 1) {
+     *  this.notesData.chartIssues.push('isDefaultBPM')
+     * }
+     * TODO: check for misalignedTimeSignatures
+     */
+
+    this.notesData.length = Math.floor(globalLastNote.time)
+    this.notesData.effectiveLength = Math.floor(globalLastNote.time - globalFirstNote.time)
+    if (globalFirstNote.time < (LEADING_SILENCE_THRESHOLD_MS / 1000)) {
+      this.notesData.chartIssues.push('smallLeadingSilence')
+    }
+
+    this.setMissingExperts()
+
+    return this.notesData
+  }
+
+  private setMissingExperts () {
+    // TODO
+  }
+}
+
+export class MidiParserService {
+  public async parse (filepath: string): Promise<NotesData> {
+    const chartBuffer = await readFile(filepath)
+    const midiFile = new MIDIFile(chartBuffer)
+    return new MidiParser(midiFile).parse()
+  }
 }

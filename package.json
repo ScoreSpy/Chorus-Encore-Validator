@@ -21,6 +21,8 @@
     "outputPath": "dist"
   },
   "devDependencies": {
+    "@types/charset-detector": "^0.0.1",
+    "@types/lodash": "^4.14.191",
     "@types/node": "^16.18.16",
     "@types/yargs": "^17.0.22",
     "@typescript-eslint/eslint-plugin": "^5.55.0",
@@ -33,8 +35,10 @@
   },
   "dependencies": {
     "chalk": "^4.1.2",
+    "charset-detector": "^0.0.2",
     "iconv-lite": "^0.6.3",
     "jszip": "^3.10.1",
+    "lodash": "^4.17.21",
     "midifile": "^2.0.0",
     "yargs": "^17.7.1"
   }

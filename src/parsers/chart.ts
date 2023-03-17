@@ -1,342 +1,530 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
-// @ts-nocheck
+/* eslint-disable no-return-assign */
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
+/* eslint-disable no-mixed-operators */
+/* eslint-disable no-loop-func */
+/* eslint-disable no-plusplus */
+/* eslint-disable require-unicode-regexp */
+/* eslint-disable prefer-named-capture-group */
+/* eslint-disable no-use-before-define */
+/* eslint-disable max-classes-per-file */
+import { createHash } from 'crypto'
+import { readFile } from 'fs/promises'
+import * as _ from 'lodash'
 
-/*
- * Ported and updated from https://github.com/Paturages/chorus/blob/master/src/utils/meta/chart.js with permission from Paturages
- * this needs to be typed out correctly... hopefully not by me
- */
+import { getEncoding } from './../helpers'
+import { Difficulty, Instrument, NoteIssue, NoteIssueType, NotesData, TrackIssueType } from './../types/notes-data'
 
-import { createMD5 } from './../helpers'
-import * as Iconv from 'iconv-lite'
-import type { ChorusChartData } from './../types'
+const LEADING_SILENCE_THRESHOLD_MS = 1000
+const MIN_SUSTAIN_GAP_MS = 40
+const MIN_SUSTAIN_MS = 100
+const NPS_GROUP_SIZE_MS = 1000
 
-// To avoid people overwriting useful metadata
-const fieldBlacklist = {
-  link: true,
-  source: true,
-  lastModified: true
-}
+/* eslint-disable @typescript-eslint/naming-convention */
+type TrackName = keyof typeof trackNameMap
+const trackNameMap = {
+  ExpertSingle: { instrument: 'guitar', difficulty: 'expert' },
+  HardSingle: { instrument: 'guitar', difficulty: 'hard' },
+  MediumSingle: { instrument: 'guitar', difficulty: 'medium' },
+  EasySingle: { instrument: 'guitar', difficulty: 'easy' },
 
-const diffMap = {
-  '[ExpertSingle]': 'guitar.x',
-  '[HardSingle]': 'guitar.h',
-  '[MediumSingle]': 'guitar.m',
-  '[EasySingle]': 'guitar.e',
+  ExpertDoubleRhythm: { instrument: 'rhythm', difficulty: 'expert' },
+  HardDoubleRhythm: { instrument: 'rhythm', difficulty: 'hard' },
+  MediumDoubleRhythm: { instrument: 'rhythm', difficulty: 'medium' },
+  EasyDoubleRhythm: { instrument: 'rhythm', difficulty: 'easy' },
 
-  '[ExpertDoubleBass]': 'bass.x',
-  '[HardDoubleBass]': 'bass.h',
-  '[MediumDoubleBass]': 'bass.m',
-  '[EasyDoubleBass]': 'bass.e',
+  ExpertDoubleBass: { instrument: 'bass', difficulty: 'expert' },
+  HardDoubleBass: { instrument: 'bass', difficulty: 'hard' },
+  MediumDoubleBass: { instrument: 'bass', difficulty: 'medium' },
+  EasyDoubleBass: { instrument: 'bass', difficulty: 'easy' },
 
-  '[ExpertDoubleRhythm]': 'rhythm.x',
-  '[HardDoubleRhythm]': 'rhythm.h',
-  '[MediumDoubleRhythm]': 'rhythm.m',
-  '[EasyDoubleRhythm]': 'rhythm.e',
+  ExpertDrums: { instrument: 'drums', difficulty: 'expert' },
+  HardDrums: { instrument: 'drums', difficulty: 'hard' },
+  MediumDrums: { instrument: 'drums', difficulty: 'medium' },
+  EasyDrums: { instrument: 'drums', difficulty: 'easy' },
 
-  '[ExpertKeyboard]': 'keys.x',
-  '[HardKeyboard]': 'keys.h',
-  '[MediumKeyboard]': 'keys.m',
-  '[EasyKeyboard]': 'keys.e',
+  ExpertKeyboard: { instrument: 'keys', difficulty: 'expert' },
+  HardKeyboard: { instrument: 'keys', difficulty: 'hard' },
+  MediumKeyboard: { instrument: 'keys', difficulty: 'medium' },
+  EasyKeyboard: { instrument: 'keys', difficulty: 'easy' },
 
-  '[ExpertDrums]': 'drums.x',
-  '[HardDrums]': 'drums.h',
-  '[MediumDrums]': 'drums.m',
-  '[EasyDrums]': 'drums.e',
+  ExpertGHLGuitar: { instrument: 'guitarghl', difficulty: 'expert' },
+  HardGHLGuitar: { instrument: 'guitarghl', difficulty: 'hard' },
+  MediumGHLGuitar: { instrument: 'guitarghl', difficulty: 'medium' },
+  EasyGHLGuitar: { instrument: 'guitarghl', difficulty: 'easy' },
 
-  '[ExpertGHLGuitar]': 'guitarghl.x',
-  '[HardGHLGuitar]': 'guitarghl.h',
-  '[MediumGHLGuitar]': 'guitarghl.m',
-  '[EasyGHLGuitar]': 'guitarghl.e',
-
-  '[ExpertGHLBass]': 'bassghl.x',
-  '[HardGHLBass]': 'bassghl.h',
-  '[MediumGHLBass]': 'bassghl.m',
-  '[EasyGHLBass]': 'bassghl.e'
-}
-
-/*
- * For normalizing the note numbers for the hashes,
- * goes from 1 to 5 for regular frets,
- * 6 for the 6th fret of GHL
- * and 7 for open notes
- */
-const notesMap = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 8: 6, 7: 7 }
+  ExpertGHLBass: { instrument: 'bassghl', difficulty: 'expert' },
+  HardGHLBass: { instrument: 'bassghl', difficulty: 'hard' },
+  MediumGHLBass: { instrument: 'bassghl', difficulty: 'medium' },
+  EasyGHLBass: { instrument: 'bassghl', difficulty: 'easy' }
+} as const
+/* eslint-enable @typescript-eslint/naming-convention */
 
 
-function parse (chart: Buffer): ChorusChartData | null {
-  const chartBuffer = chart
-  const sections = []
+class TrackParser {
+  private instrument: Instrument
+  private difficulty: Difficulty
 
-  let Resolution = -1
+  private ungroupedNotes: { tick: number; note: number; endTick: number }[]
+  private groupedNotes: { tick: number; note: number[] }[]
 
-  const brokenNotes: {
-    found?: boolean,
-    index: number
-    section: {
-      index: number
-      section: string
-    }
-    time?: number
-  }[] = []
+  private noteIssues: NoteIssue[] = []
+  private trackIssues: TrackIssueType[] = []
 
-  const chartData: ChorusChartData = {
-    chartMeta: {
-      length: -1,
-      effectiveLength: -1
-    },
-    hasStarPower: false,
-    hasForced: false,
-    hasTap: false,
-    hasOpen: {},
-    hasSoloSections: false,
-    hasLyrics: false,
-    hasSections: false,
-    noteCounts: {},
-    hashes: {
-      file: createMD5(chartBuffer)
-    },
-    is120: false,
-    hasBrokenNotes: false
+  constructor (
+    private notesData: NotesData,
+    track: TrackName,
+    private lines: string[],
+    private resolution: number,
+    private tempoMap: { tick: number; bpm: number }[]
+  ) {
+    this.instrument = trackNameMap[track].instrument
+    this.difficulty = trackNameMap[track].difficulty
+    if (!notesData.instruments.includes(this.instrument)) { notesData.instruments.push(this.instrument) }
+
+    this.ungroupedNotes = _.chain(this.lines).
+      map((line) => {
+        const result = (/(\d+) = N (\d+) (\d+)/).exec(line) || []
+        return {
+          tick: parseInt(result[1], 10),
+          note: parseInt(result[2], 10),
+          endTick: parseInt(result[1], 10) + parseInt(result[3], 10)
+        }
+      }).
+      filter((line) => !isNaN(line.tick) && !isNaN(line.note)). // Keep only regular notes and note modifiers
+      value()
+
+    this.groupedNotes = _.chain(this.ungroupedNotes).
+      groupBy((note) => note?.tick).
+      values().
+      map((noteGroup) => ({
+        tick: noteGroup[0].tick,
+        note: noteGroup.map((note) => note.note)
+      })).
+      value()
   }
 
-  const utf8 = Iconv.decode(chartBuffer, 'utf8')
-  const chartString = utf8
-  if (utf8.indexOf('\u0000') >= 0) {
-    throw new Error('ini is not encoded in utf8 (utf16)')
-    // chartString = Iconv.decode(chart, 'utf16')
-  } else if (utf8.indexOf('�') >= 0) {
-    throw new Error('ini is not encoded in utf8 (latin1)')
-    // chartString = Iconv.decode(chart, 'latin1')
-  }
+  public get firstNote () { return _.first(this.groupedNotes) ?? null }
+  public get lastNote () { return _.last(this.groupedNotes) ?? null }
 
-  // Trim each line because of Windows \r\n shenanigans
-  const lines = chartString.split('\n').map((line) => line.trim())
+  private addNoteIssue (issueType: NoteIssueType, tick: number) { this.noteIssues.push({ issueType, tick, time: 0 }) }
+  private addTrackIssue (issueType: TrackIssueType) { this.trackIssues.push(issueType) }
 
-  // Get song metadata from the [Song] section as a backup to the song.ini
-  const songIndex = lines.find((line) => line.match(/\[Song\]/u))
-
-  // Catch invalid files
-  if (!songIndex) {
-    return chartData
-  }
-
-  for (let i = 1; lines[i] !== null && lines[i] !== '}'; i++) {
-    let [param, value] = lines[i].split(' = ')
-    if (!value || !value.trim() || fieldBlacklist[param.trim()]) { continue }
-    param = param.trim()
-    value = value.trim()
-    if (value[0] === '"') { value = value.slice(1, -1) }
-
-    // For some reason, there's an extra ", " in front of the year
-    if (param === 'Year') { value = value.replace(', ', '') }
-    chartData.chartMeta[param] = value
-  }
-
-  // Detect sections and lyrics
-  const eventsIndex = lines.indexOf('[Events]')
-  for (let i = eventsIndex; lines[i] !== null && lines[i] !== '}'; i++) {
-    if (!lines[i]) { continue }
-
-    const [index, value] = lines[i].split(' = ')
-    if (!value) { continue }
-
-    if (value.match(/"lyric /u)) {
-      chartData.hasLyrics = true
-    } else if (value.match(/"section /u)) {
-      chartData.hasSections = true
-      sections.push({
-        index: Number(index.trim()),
-        section: value
-      })
-    }
-  }
-
-  // Detect features
-  const notesIndex = lines.findIndex((line) => diffMap[line.trim()])
-  if (!notesIndex || notesIndex < 0) { return chartData }
-  let firstNoteIndex = 0
-  let lastNoteIndex = 0
-  let previous: { index: string, note: string } = null
-  let currentStatus: string = null
-  const notes = {}
-
-  for (let i = notesIndex; i < lines.length; i++) {
-    const line = lines[i]
-    if (line.match(/N 5 /u)) {
-      chartData.hasForced = true
-    } else if (line.match(/N 6 /u)) {
-      chartData.hasTap = true
-    } else if (line.match(/N 7 /u) && currentStatus) { // Just flag open notes for the whole instrument
-      chartData.hasOpen[currentStatus.slice(0, currentStatus.indexOf('.'))] = true
-    } else if (line.match(/ solo/u)) {
-      chartData.hasSoloSections = true
-    } else if (line.match(/S 2/u)) {
-      chartData.hasStarPower = true
+  public parseTrack () {
+    if (this.instrument === 'drums') {
+      this.parseDrumTrack()
+    } else {
+      this.parseNonDrumTrack()
     }
 
-    // Detect new difficulty
-    if (diffMap[line]) {
-      currentStatus = diffMap[line]
-      notes[currentStatus] = {}
-    }
+    // Add notes hash
+    this.notesData.hashes.push({
+      instrument: this.instrument,
+      difficulty: this.difficulty,
+      hash: createHash('md5').update(this.lines.join('')).digest('hex')
+    })
 
-    // Detect new notes
-    // eslint-disable-next-line prefer-named-capture-group
-    const [, index, note] = line.match(/(\d+) = N ([0-4]|7|8) /u) || []
-    if (note && currentStatus) {
-      if (!firstNoteIndex) { firstNoteIndex = Number(index) }
-      if (Number(index) > lastNoteIndex) { lastNoteIndex = Number(index) }
-      notes[currentStatus][index] = `${(notes[currentStatus][index] || '')}${notesMap[note]}`
-    }
+    // Add tempo map hash
+    this.notesData.tempoMapHash = createHash('md5').update(this.tempoMap.map((t) => `${t.tick}_${t.bpm}`).join(':')).digest('hex')
+    this.notesData.tempoMarkerCount = this.tempoMap.length
 
-    /*
-     * Detect broken notes (i.e. very small distance between notes)
-     * Abysmal @ 64000 and 64768 (1:10'ish) has broken GR chords (distance = 4)
-     * Down Here @ 116638 (1:24) has a double orange (distance = 2)
-     * I'm in the Band very first note is a doubled yellow (distance = 1)
-     * There's likely gonna be some false positives, but this is likely to help setlist makers
-     * for proofchecking stuff.
-     */
-    if (previous) {
-      const distance = parseInt(index, 10) - parseInt(previous.index, 10)
+    // Add note count
+    this.notesData.noteCounts.push({ instrument: this.instrument, difficulty: this.difficulty, count: this.groupedNotes.length })
+
+    // Check for broken notes (note: false positives are possible)
+    for (let i = 1; i < this.groupedNotes.length; i++) {
+      const distance = this.groupedNotes[i].tick - this.groupedNotes[i - 1].tick
       if (distance > 0 && distance < 5) {
-        brokenNotes.push({
-          index: Number(previous.index),
-          // eslint-disable-next-line no-loop-func
-          section: sections[sections.findIndex((section) => Number(section.index) > Number(previous.index)) - 1],
-          time: 0
-        })
+        this.addNoteIssue('brokenNote', this.groupedNotes[i].tick)
       }
     }
 
-    if (Number(index) && (!previous || previous.index !== index)) { previous = { index, note } }
+    if (this.noteIssues.length) {
+      this.notesData.noteIssues.push({ instrument: this.instrument, difficulty: this.difficulty, noteIssues: this.noteIssues })
+    }
+    if (this.trackIssues.length) {
+      this.notesData.trackIssues.push({ instrument: this.instrument, difficulty: this.difficulty, trackIssues: this.trackIssues })
+    }
   }
 
-  // Get Tempo map [SyncTrack] to get effective song length
-  const syncTrackIndexStart = lines.indexOf('[SyncTrack]')
-  const syncTrackIndexEnd = lines.indexOf('}', syncTrackIndexStart)
-  const tempoMap: [number, number][] = lines.slice(syncTrackIndexStart, syncTrackIndexEnd).reduce((arr, line) => {
-    // eslint-disable-next-line prefer-named-capture-group
-    const [, index, bpm] = line.match(/\s*(\d+) = B (\d+)/u) || []
-    if (index) { arr.push([Number(index), Number(bpm) / 1000]) }
-    return arr
-  }, [])
-
-  let time = 0
-  let timeToFirstNote = 0
-  let timeToLastNote = 0
-  let isFirstNoteFound = false
-  let isLastNoteFound = false
-  let currentIndex = -1
-  let currentBpm = -1
-  Resolution = Number((chartData as any).chartMeta.Resolution)
-
-  for (let i = 0; i < tempoMap.length; i++) {
-    if (!tempoMap[i]) { continue }
-
-    const index = tempoMap[i][0]
-    const bpm = tempoMap[i][1]
-
-    if (currentIndex !== -1) {
-      /*
-       * Does it look like I pulled this formula from my ass? because I kinda did tbh
-       * (the "Resolution" parameter defines how many "units" there are in a beat)
-       */
-      time += (((index - currentIndex) * 60) / (currentBpm * Resolution))
-
-      // Calculate the timestamp of the first note
-      if (index <= firstNoteIndex) {
-        timeToFirstNote += (((index - currentIndex) * 60) / (currentBpm * Resolution))
-      } else if (!isFirstNoteFound) {
-        isFirstNoteFound = true
-        timeToFirstNote += (((firstNoteIndex - currentIndex) * 60) / (currentBpm * Resolution))
+  private parseDrumTrack () {
+    let trackHasStarPower = false
+    let trackHasActivationLanes = false
+    // Check for drum note type properties
+    for (const line of this.lines) {
+      if (!trackHasStarPower && line.includes('S 2')) { trackHasStarPower = true }
+      if (!trackHasActivationLanes && line.includes('S 64 ')) { trackHasActivationLanes = true }
+      if (!this.notesData.has2xKick && line.includes('N 32 ')) { this.notesData.has2xKick = true }
+    }
+    // Check for three-note drum chords (not including kicks)
+    for (const note of this.groupedNotes) {
+      const nonKickDrumNoteIds = [1, 2, 3, 4, 5]
+      if (_.sumBy(nonKickDrumNoteIds, (id) => (note.note.includes(id) ? 1 : 0)) >= 3) {
+        this.addNoteIssue('threeNoteDrumChord', note.tick)
       }
+    }
+    if (!trackHasStarPower) { this.addTrackIssue('noStarPower') }
+    if (!trackHasActivationLanes) { this.addTrackIssue('noDrumActivationLanes') }
+  }
 
-      // Calculate the timestamp of the last note
-      if (index <= lastNoteIndex) {
-        timeToLastNote += (((index - currentIndex) * 60) / (currentBpm * Resolution))
-      } else if (!isLastNoteFound) {
-        isLastNoteFound = true
-        timeToLastNote += (((lastNoteIndex - currentIndex) * 60) / (currentBpm * Resolution))
-      }
-
-      // Compute timestamp of broken notes
-      // eslint-disable-next-line id-length
-      for (let n = 0; n < brokenNotes.length; n++) {
-        const note = brokenNotes[n]
-        if (index <= note.index) {
-          note.time += (((index - currentIndex) * 60) / (currentBpm * Resolution))
-        } else if (!note.found) {
-          note.found = true
-          note.time += (((note.index - currentIndex) * 60) / (currentBpm * Resolution))
+  private parseNonDrumTrack () {
+    let trackHasStarPower = false
+    // Check for guitar note type properties
+    for (const line of this.lines) {
+      if (!this.notesData.hasSoloSections && line.includes('E solo')) { this.notesData.hasSoloSections = true }
+      if (!this.notesData.hasForcedNotes && line.includes('N 5 ')) { this.notesData.hasForcedNotes = true }
+      if (!this.notesData.hasOpenNotes && line.includes('N 7 ')) { this.notesData.hasOpenNotes = true }
+      if (!trackHasStarPower && line.includes('S 2')) { trackHasStarPower = true }
+      if (!this.notesData.hasTapNotes && line.includes('N 6 ')) { this.notesData.hasTapNotes = true }
+    }
+    // Check for sustain properties
+    this.setSustainProperties()
+    // Calculate NPS properties
+    this.setNpsProperties()
+    if (this.instrument !== 'guitarghl' && this.instrument !== 'bassghl') {
+      const fiveNoteChordIds = [0, 1, 2, 3, 4]
+      const greenBlueChordIds = [0, 3]
+      const redOrangeChordIds = [1, 4]
+      const greenOrangeChordIds = [0, 4]
+      const openIds = [7]
+      const openOrangeIds = [7, 4]
+      const openOrangeBlueIds = [7, 4, 3]
+      for (const note of this.groupedNotes) {
+        // Check for five-note chords
+        if (fiveNoteChordIds.every((id) => note.note.includes(id))) {
+          this.addNoteIssue('fiveNoteChord', note.tick)
+        }
+        // Check for notes forbidden on lower difficulties
+        if (this.difficulty === 'hard') {
+          if (openIds.some((id) => note.note.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.tick) }
+          if (greenBlueChordIds.every((id) => note.note.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.tick) }
+          if (redOrangeChordIds.every((id) => note.note.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.tick) }
+          if (greenOrangeChordIds.every((id) => note.note.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.tick) }
+        } else if (this.difficulty === 'medium') {
+          if (openOrangeIds.some((id) => note.note.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.tick) }
+          if (greenBlueChordIds.every((id) => note.note.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.tick) }
+        } else if (this.difficulty === 'easy') {
+          if (openOrangeBlueIds.some((id) => note.note.includes(id))) { this.addNoteIssue('difficultyForbiddenNote', note.tick) }
         }
       }
     }
-
-    currentIndex = index
-    currentBpm = bpm
+    if (!trackHasStarPower) { this.addTrackIssue('noStarPower') }
   }
 
-
-  /*
-   * If the current index is 0 (beginning of chart) and the BPM is 120 ("B 120000"),
-   * it's most likely cancer (not beat mapped) and has to be checked by physicians
-   */
-  chartData.is120 = currentIndex === 0 && currentBpm === 120
-
-  /*
-   * Do it one last time against the last note if the last note is after
-   * the last BPM change
-   */
-  if (currentIndex < lastNoteIndex) {
-    time += (((lastNoteIndex - currentIndex) * 60) / (currentBpm * Resolution))
-    timeToLastNote += (((lastNoteIndex - currentIndex) * 60) / (currentBpm * Resolution))
-  }
-
-  brokenNotes.forEach((note) => {
-    delete note.found
-  })
-
-  // Compute the hash of the .chart itself first
-  for (const part in notes) {
-    if (!part) { continue }
-
-    const [instrument, difficulty] = part.split('.')
-
-    // We have to reorder the values by ascending index (Object.values gets by "alphabetical" order of index)
-    // eslint-disable-next-line id-length
-    const notesArray = Object.keys(notes[part]).sort((a, b) => (Number(a) < Number(b) ? -1 : 1)).map((index) => notes[part][Number(index)])
-
-    // Ignore tracks with less than 10 notes
-    if (notesArray.length < 10) { continue }
-
-    if (!chartData.hashes[instrument]) {
-      chartData.hashes[instrument] = {}
-      chartData.noteCounts[instrument] = {}
+  private setSustainProperties () {
+    /** The index of the tempo marker that applies to the current note being checked in the for loop. */
+    let currentTempoMarkerIndex = 0
+    /** @returns the tick delta between `tick` and `tick` + `deltaMs`. */
+    const getTickDeltaMs = (tick: number, deltaMs: number) => {
+      let tickTempoMarkerIndex = currentTempoMarkerIndex
+      while (this.tempoMap[tickTempoMarkerIndex + 1] && this.tempoMap[tickTempoMarkerIndex + 1].tick <= tick) {
+        tickTempoMarkerIndex++
+      }
+      return (deltaMs / 1000) * ((this.tempoMap[tickTempoMarkerIndex].bpm * this.resolution) / 60)
     }
 
-    // Compute the hashes and note counts of individual difficulties/instruments
-    chartData.noteCounts[instrument][difficulty] = notesArray.length
-    chartData.hashes[instrument][difficulty] = createMD5(notesArray.join(' '))
-    if (typeof chartData.hasOpen[instrument] === 'undefined') { chartData.hasOpen[instrument] = false }
+    /** Sustain gaps at the end of notes already checked in the for loop. `startTick` is inclusive, `endTick` is exclusive. */
+    const futureSustainGaps: { startTick: number; endTick: number }[] = []
+    for (const note of this.ungroupedNotes) {
+      const nextMarker = this.tempoMap[currentTempoMarkerIndex + 1]
+      if (nextMarker && nextMarker.tick <= note.tick) { currentTempoMarkerIndex++ }
+
+      _.remove(futureSustainGaps, (r) => r.endTick <= note.tick)
+      if (futureSustainGaps.find((r) => note.tick >= r.startTick && note.tick < r.endTick)) {
+        this.addNoteIssue('badSustainGap', note.tick)
+      }
+      if (note.tick !== note.endTick) {
+        futureSustainGaps.push({
+          startTick: note.endTick,
+          endTick: note.endTick + getTickDeltaMs(note.endTick, MIN_SUSTAIN_GAP_MS)
+        })
+        if (note.endTick - note.tick < getTickDeltaMs(note.tick, MIN_SUSTAIN_MS)) {
+          this.addNoteIssue('babySustain', note.tick)
+        }
+      }
+    }
   }
 
-  chartData.chartMeta.length = time >> 0
+  private setNpsProperties () {
+    /** The index of the tempo marker that applies to the current note being checked in the for loop. */
+    let currentTempoMarkerIndex = 0
+    /** @returns the number of ticks that correspond to `deltaMs` milliseconds at the current bpm. */
+    const getTickDeltaMs = (deltaMs: number) => (deltaMs / 1000) * ((this.tempoMap[currentTempoMarkerIndex].bpm * this.resolution) / 60)
 
-  // "Effective song length" = time between first and last note
-  chartData.chartMeta.effectiveLength = (timeToLastNote - timeToFirstNote) >> 0
-  chartData.hasBrokenNotes = Boolean(brokenNotes.length)
+    let currentNpsGroupSizeInTicks = getTickDeltaMs(NPS_GROUP_SIZE_MS)
+    /** The list of ticks that contain previous notes that are within `NPS_GROUP_SIZE_MS` milliseconds of `note`. */
+    const recentNoteTicks: number[] = []
+    let highestNpsNote = { noteCount: 1, note: this.groupedNotes[0] }
+    for (const note of this.groupedNotes) {
+      const nextMarker = this.tempoMap[currentTempoMarkerIndex + 1]
+      if (nextMarker && nextMarker.tick <= note.tick) {
+        currentTempoMarkerIndex++
+        currentNpsGroupSizeInTicks = getTickDeltaMs(NPS_GROUP_SIZE_MS)
+      }
 
-  return chartData
+      _.remove(recentNoteTicks, (r) => r <= note.tick - currentNpsGroupSizeInTicks)
+      recentNoteTicks.push(note.tick)
+      if (highestNpsNote.noteCount < recentNoteTicks.length) {
+        highestNpsNote = { noteCount: recentNoteTicks.length, note }
+      }
+    }
+
+    this.notesData.maxNps.push({
+      instrument: this.instrument,
+      difficulty: this.difficulty,
+      nps: (highestNpsNote.noteCount * 1000) / NPS_GROUP_SIZE_MS,
+      tick: highestNpsNote.note.tick,
+      time: 0
+    })
+  }
 }
 
-export default function parseChart (chartFile: Buffer): ChorusChartData | null {
-  const data = parse(chartFile)
-  /*
-   * if (data?.hasBrokenNotes) {
-   *   throw new Error('Chart has broken notes')
-   * }
-   */
+class ChartParser {
+  private notesData: NotesData
 
-  return data
+  private resolution: number
+  private tempoMap: { tick: number; bpm: number }[]
+  private timeSignatures: { tick: number; value: number }[]
+  private trackSections: { [trackName in TrackName]: string[] }
+
+  constructor (private fileSections: { [sectionName: string]: string[] }) {
+    this.notesData = {
+      instruments: [],
+      hasSoloSections: false,
+      hasLyrics: false,
+      hasForcedNotes: false,
+      hasTapNotes: false,
+      hasOpenNotes: false,
+      has2xKick: false,
+      noteIssues: [],
+      trackIssues: [],
+      chartIssues: [],
+      noteCounts: [],
+      maxNps: [],
+      hashes: [],
+      tempoMapHash: '',
+      tempoMarkerCount: 0,
+      length: 0,
+      effectiveLength: 0
+    }
+
+    this.resolution = this.getResolution()
+    this.tempoMap = this.getTempoMap()
+    this.timeSignatures = this.getTimeSignatures()
+    this.trackSections = _.pick(this.fileSections, _.keys(trackNameMap) as TrackName[])
+  }
+
+  private getResolution () {
+    const songSection = this.fileSections.Song ?? []
+    const songSectionMap = this.getFileSectionMap(songSection)
+
+    const resolution = parseInt(songSectionMap.Resolution, 10)
+    if (!resolution) { this.notesData.chartIssues.push('noResolution') }
+    return resolution
+  }
+
+  private getFileSectionMap (fileSection: string[]) {
+    const fileSectionMap: { [key: string]: string } = {}
+    for (const line of fileSection) {
+      const [key, value] = line.split(' = ').map((s) => s.trim())
+      fileSectionMap[key] = value.startsWith('"') ? value.slice(1, -1) : value
+    }
+    return fileSectionMap
+  }
+
+  private getTempoMap () {
+    const tempoMap: { tick: number; bpm: number }[] = []
+    const syncTrack = this.fileSections.SyncTrack ?? []
+    for (const line of syncTrack) {
+      const [, stringTick, stringBpm] = (/\s*(\d+) = B (\d+)/).exec(line) || []
+      const tick = parseInt(stringTick, 10)
+      const bpm = parseInt(stringBpm, 10) / 1000
+      if (isNaN(tick) || isNaN(bpm)) { continue } // Not a bpm marker
+      tempoMap.push({ tick, bpm })
+    }
+    if (!tempoMap.length) { this.notesData.chartIssues.push('noSyncTrackSection') }
+    return tempoMap
+  }
+
+  private getTimeSignatures () {
+    const timeSignatures: { tick: number; value: number }[] = []
+    const syncTrack = this.fileSections.SyncTrack ?? []
+    for (const line of syncTrack) {
+      const [, stringTick, stringNumerator, stringDenominatorExp] = (/\s*(\d+) = TS (\d+)(?: (\d+))?/).exec(line) || []
+      const [tick, numerator] = [parseInt(stringTick, 10), parseInt(stringNumerator, 10)]
+      const denominatorExp = stringDenominatorExp ? parseInt(stringDenominatorExp, 10) : 2
+      if (isNaN(tick) || isNaN(numerator) || isNaN(denominatorExp)) { continue } // Not a time signature marker
+      timeSignatures.push({ tick, value: numerator / 2 ** denominatorExp })
+    }
+    if (!timeSignatures.length) { this.notesData.chartIssues.push('noSyncTrackSection') }
+    return timeSignatures
+  }
+
+  parse (): NotesData {
+    if (!this.resolution || !this.tempoMap.length || !this.timeSignatures.length) { return this.notesData }
+
+    let globalFirstNote: { tick: number; note: number[] } | null = null
+    let globalLastNote: { tick: number; note: number[] } | null = null
+
+    for (const [track, lines] of _.entries(this.trackSections) as [TrackName, string[]][]) {
+      const trackParser = new TrackParser(this.notesData, track, lines, this.resolution, this.tempoMap)
+
+      trackParser.parseTrack()
+
+      globalFirstNote = _.minBy([globalFirstNote, trackParser.firstNote], (note) => note?.tick ?? Infinity) ?? null
+      globalLastNote = _.maxBy([globalLastNote, trackParser.lastNote], (note) => note?.tick ?? -Infinity) ?? null
+    }
+    if (globalFirstNote === null || globalLastNote === null) {
+      this.notesData.chartIssues.push('noNotes')
+      return this.notesData
+    }
+    this.setEventsProperties()
+    this.setMissingExperts()
+    this.setTimeSignatureProperties()
+    this.setTempomapProperties(globalFirstNote.tick, globalLastNote.tick)
+
+    return this.notesData
+  }
+
+  private setEventsProperties () {
+    const events = this.fileSections.Events ?? []
+    let hasSections = false
+    for (const line of events) {
+      if (line.includes('"lyric ')) { this.notesData.hasLyrics = true }
+      if (line.includes('"section ')) { hasSections = true }
+    }
+    if (!hasSections) {
+      this.notesData.chartIssues.push('noSections')
+    }
+  }
+
+  private setMissingExperts () {
+    const missingExperts = _.chain(this.trackSections as { [trackName: string]: string[] }).
+      keys().
+      map((key: TrackName) => trackNameMap[key]).
+      // @ts-ignore
+      groupBy((trackSection) => trackSection.instrument).
+      // @ts-ignore
+      mapValues((trackSections) => trackSections.map((trackSection) => trackSection.difficulty)).
+      toPairs().
+      filter(([, difficulties]) => !difficulties.includes('expert') && difficulties.length > 0).
+      map(([instrument]) => instrument as Instrument).
+      value()
+
+    if (missingExperts.length > 0) {
+      this.notesData.chartIssues.push('noExpert')
+    }
+  }
+
+  private setTimeSignatureProperties () {
+    let lastBeatlineTick = 0
+    for (let i = 0; i < this.timeSignatures.length; i++) {
+      if (lastBeatlineTick !== this.timeSignatures[i].tick) {
+        this.notesData.chartIssues.push('misalignedTimeSignatures')
+        break
+      }
+      while (this.timeSignatures[i + 1] && lastBeatlineTick < this.timeSignatures[i + 1].tick) {
+        lastBeatlineTick += this.resolution * this.timeSignatures[i].value * 4
+      }
+    }
+  }
+
+  /**
+   * Scans through the tempo map and sets properties derived from it
+   */
+  private setTempomapProperties (firstNoteTick: number, lastNoteTick: number) {
+    // Add an implied bpm marker at the end
+    this.tempoMap.push({ tick: lastNoteTick, bpm: _.last(this.tempoMap)!.bpm })
+
+    let [totalChartTime, timeToFirstNote, timeToLastNote] = [0, 0, 0] // Seconds
+    let { tick: lastBpmMarkerTick, bpm: lastBpm } = this.tempoMap[0]
+    for (const { tick: nextBpmMarkerTick, bpm: nextBpm } of this.tempoMap) { // Iterate through each tempo map region
+      // the "Resolution" parameter is the number of ticks in each beat, so `bpm * resolution` is the ticks per minute
+      const secondsPerTickInRegion = 60 / (lastBpm * this.resolution)
+
+      totalChartTime += (nextBpmMarkerTick - lastBpmMarkerTick) * secondsPerTickInRegion
+
+      if (firstNoteTick > lastBpmMarkerTick) { // Calculate the timestamp of the first note
+        timeToFirstNote += (Math.min(firstNoteTick, nextBpmMarkerTick) - lastBpmMarkerTick) * secondsPerTickInRegion
+      }
+
+      if (lastNoteTick > lastBpmMarkerTick) { // Calculate the timestamp of the last note
+        timeToLastNote += (Math.min(lastNoteTick, nextBpmMarkerTick) - lastBpmMarkerTick) * secondsPerTickInRegion
+      }
+
+      for (const issueTrack of this.notesData.noteIssues) { // Calculate the timestamp of note issues
+        for (const note of issueTrack.noteIssues) {
+          if (note.tick > lastBpmMarkerTick) {
+            note.time += (Math.min(note.tick, nextBpmMarkerTick) - lastBpmMarkerTick) * secondsPerTickInRegion
+          }
+        }
+      }
+      for (const maxNpsNote of this.notesData.maxNps) { // Calculate the timestamp of the max NPS
+        if (maxNpsNote.tick > lastBpmMarkerTick) {
+          maxNpsNote.time += (Math.min(maxNpsNote.tick, nextBpmMarkerTick) - lastBpmMarkerTick) * secondsPerTickInRegion
+        }
+      }
+
+      lastBpmMarkerTick = nextBpmMarkerTick
+      lastBpm = nextBpm
+    }
+
+    this.notesData.noteIssues.forEach((issueTrack) => issueTrack.noteIssues = _.uniqBy(issueTrack.noteIssues, (n) => n.issueType + n.tick))
+    this.notesData.noteIssues.forEach((issueTrack) => issueTrack.noteIssues.forEach((n) => n.time = _.round(n.time, 2)))
+    this.notesData.maxNps.forEach((m) => m.time = _.round(m.time, 2))
+    if (this.tempoMap.length - 1 === 1 && this.tempoMap[0].bpm === 120 && this.timeSignatures.length === 1) {
+      this.notesData.chartIssues.push('isDefaultBPM')
+    }
+    if (timeToFirstNote < (LEADING_SILENCE_THRESHOLD_MS / 1000)) {
+      this.notesData.chartIssues.push('smallLeadingSilence')
+    }
+    this.notesData.length = Math.floor(totalChartTime)
+    this.notesData.effectiveLength = Math.floor(timeToLastNote - timeToFirstNote)
+  }
+}
+
+export class ChartParserService {
+  async parse (filepath: string): Promise<NotesData> {
+    const chartBuffer = await readFile(filepath)
+    const encoding = getEncoding(chartBuffer)
+    const chartText = chartBuffer.toString(encoding)
+    const fileSections = this.getFileSections(chartText) ?? {}
+    return new ChartParser(fileSections).parse()
+  }
+
+  private getFileSections (chartText: string) {
+    const sections: { [sectionName: string]: string[] } = {}
+    let skipLine = false
+    let readStartIndex = 0
+    let readingSection = false
+    let thisSection: string | null = null
+    for (let i = 0; i < chartText.length; i++) {
+      if (readingSection) {
+        if (chartText[i] === ']') {
+          readingSection = false
+          thisSection = chartText.slice(readStartIndex, i)
+        }
+        if (chartText[i] === '\n') { return null }
+        continue // Keep reading section until it ends
+      }
+
+      if (chartText[i] === '=') { skipLine = true } // Skip all user-entered values
+      if (chartText[i] === '\n') { skipLine = false }
+      if (skipLine) { continue } // Keep skipping until '\n' is found
+
+      if (chartText[i] === '{') {
+        skipLine = true
+        readStartIndex = i + 1
+      } else if (chartText[i] === '}') {
+        if (!thisSection) { return null }
+        // Trim each line because of Windows \r\n shenanigans
+        sections[thisSection] = chartText.slice(readStartIndex, i).split('\n').map((line) => line.trim()).filter((line) => line.length)
+      } else if (chartText[i] === '[') {
+        readStartIndex = i + 1
+        readingSection = true
+      }
+    }
+
+    return sections
+  }
 }

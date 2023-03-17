@@ -1,6 +1,6 @@
-import parseChart from './chart'
+import { ChartParserService } from './chart'
+import { MidiParserService } from './midi'
 import parseIni from './ini'
-import parseMidi from './midi'
 
-export { parseChart, parseIni, parseMidi }
-export default { parseChart, parseIni, parseMidi }
+export { ChartParserService, MidiParserService, parseIni }
+export default { ChartParserService, MidiParserService, parseIni }

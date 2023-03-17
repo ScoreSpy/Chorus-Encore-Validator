@@ -7,9 +7,10 @@ import chalk from 'chalk'
 import JSZip from 'jszip'
 import logger from './logger'
 import parsers from './../parsers'
-import type { ChorusChartData, ChorusIni, SongArchive, SongData } from '../types'
+import type { ChorusIni, SongArchive, SongData } from '../types'
 import { createCipheriv, randomBytes } from 'node:crypto'
 import cryptoConfig from './../config/crypto.json'
+import { NotesData } from '../types/notes-data'
 
 export default class Song {
   errors: string[]
@@ -125,15 +126,15 @@ export default class Song {
     return ini
   }
 
-  private async parseChart (): Promise<ChorusChartData> {
+  private async parseChart (): Promise<NotesData> {
     if (this.output.files.chart.mid) {
-      const data = await readFile(join(this.baseDir, this.chartFile))
-      const chart = parsers.parseMidi(data)
+      const chartParser = new parsers.MidiParserService()
+      const chart = await chartParser.parse(join(this.baseDir, this.chartFile))
       if (chart === null) { throw new Error('chart read error') }
       return chart
     } else if (this.output.files.chart.chart) {
-      const data = await readFile(join(this.baseDir, this.chartFile))
-      const chart = parsers.parseChart(data)
+      const chartParser = new parsers.ChartParserService()
+      const chart = await chartParser.parse(join(this.baseDir, this.chartFile))
       if (chart === null) { throw new Error('chart read error') }
       return chart
     }
