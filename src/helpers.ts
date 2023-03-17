@@ -4,7 +4,7 @@ import { constants as FS_CONSTANTS } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { default as detect } from 'charset-detector'
 import { dirname, join, normalize } from 'node:path'
-import type { SongArchive } from './types'
+import type { SongArchive } from './types/chorus'
 
 export function fileExists (path: string): Promise<boolean> {
   return access(path, FS_CONSTANTS.F_OK).then(() => true).catch(() => false)

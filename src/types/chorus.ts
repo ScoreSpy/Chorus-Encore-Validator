@@ -1,4 +1,4 @@
-import { NotesData } from './types/notes-data'
+import { NotesData } from './notes-data'
 
 export type SongArchive = {
     baseFolder: string,

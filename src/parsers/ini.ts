@@ -6,7 +6,7 @@
  */
 
 import * as Iconv from 'iconv-lite'
-import { ChorusIni } from '../types'
+import { ChorusIni } from '../types/chorus'
 
 const fieldBlacklist = {
   link: true,

@@ -4,13 +4,14 @@
     "build": "npx tsc",
     "clean": "gts clean",
     "compile": "npm run build && pkg ./build/src/index.js --config package.json",
-    "dev": "nodemon --watch './src/**/*.ts' --exec ts-node ./src/index.ts",
+    "dev": "nodemon --watch './src/**/*.ts' --exec ts-node --files ./src/index.ts",
     "fix": "gts fix",
     "lint": "gts lint",
     "posttest": "npm.cmd run lint",
     "prepare": "npm.cmd run tsc",
     "pretest": "npm.cmd run tsc",
-    "tsc": "tsc"
+    "tsc": "tsc",
+    "trace": "tsc --traceResolution"
   },
   "pkg": {
     "targets": [
