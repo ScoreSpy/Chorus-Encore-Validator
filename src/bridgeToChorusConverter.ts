@@ -1,4 +1,4 @@
-import { Difficulty, Instrument, NoteIssueType, NotesData, TrackIssueType } from 'types/notes-data'
+import { ChartIssueType, Difficulty, Instrument, NoteIssueType, NotesData, TrackIssueType } from 'types/notes-data'
 
 export enum ChorusInstrument {
   Guitar = 1 << 0,
@@ -86,6 +86,27 @@ function instConvertArray (input: Instrument[]): ChorusInstrument {
   return convertedValue
 }
 
+function chartIssueConvert (input: ChartIssueType): ChorusChartIssueType {
+  if (input === 'unparseableSectionsOrBadEncoding') { return ChorusChartIssueType.UnparseableSectionsOrBadEncoding }
+  if (input === 'noResolution') { return ChorusChartIssueType.NoResolution }
+  if (input === 'noSyncTrackSection') { return ChorusChartIssueType.NoSyncTrackSection }
+  if (input === 'noNotes') { return ChorusChartIssueType.NoNotes }
+  if (input === 'noExpert') { return ChorusChartIssueType.NoExpert }
+  if (input === 'isDefaultBPM') { return ChorusChartIssueType.IsDefaultBPM }
+  if (input === 'misalignedTimeSignatures') { return ChorusChartIssueType.MisalignedTimeSignatures }
+  if (input === 'noSections') { return ChorusChartIssueType.NoSections }
+  if (input === 'smallLeadingSilence') { return ChorusChartIssueType.SmallLeadingSilence }
+  return 0
+}
+
+function chartIssueConvertArray (input: ChartIssueType[]): ChorusChartIssueType {
+  let convertedValue: ChorusChartIssueType = 0
+  for (const i of input) {
+    convertedValue |= chartIssueConvert(i)
+  }
+  return convertedValue
+}
+
 function diffConvert (input: Difficulty): ChorusDifficulty {
   if (input === 'easy') { return ChorusDifficulty.Easy }
   if (input === 'medium') { return ChorusDifficulty.Medium }
@@ -95,19 +116,6 @@ function diffConvert (input: Difficulty): ChorusDifficulty {
 }
 
 export default function bridgeToChorusConverter (BridgeChart: NotesData) {
-  let converttedChartIssues: ChorusChartIssueType = 0
-  for (const issue of BridgeChart.chartIssues) {
-    if (issue === 'unparseableSectionsOrBadEncoding') { converttedChartIssues |= ChorusChartIssueType.UnparseableSectionsOrBadEncoding }
-    if (issue === 'noResolution') { converttedChartIssues |= ChorusChartIssueType.NoResolution }
-    if (issue === 'noSyncTrackSection') { converttedChartIssues |= ChorusChartIssueType.NoSyncTrackSection }
-    if (issue === 'noNotes') { converttedChartIssues |= ChorusChartIssueType.NoNotes }
-    if (issue === 'noExpert') { converttedChartIssues |= ChorusChartIssueType.NoExpert }
-    if (issue === 'isDefaultBPM') { converttedChartIssues |= ChorusChartIssueType.IsDefaultBPM }
-    if (issue === 'misalignedTimeSignatures') { converttedChartIssues |= ChorusChartIssueType.MisalignedTimeSignatures }
-    if (issue === 'noSections') { converttedChartIssues |= ChorusChartIssueType.NoSections }
-    if (issue === 'smallLeadingSilence') { converttedChartIssues |= ChorusChartIssueType.SmallLeadingSilence }
-  }
-
   const chorusNoteIssues: { instrument: ChorusInstrument, difficulty: ChorusDifficulty, issueType: ChorusNoteIssueType, tick: number, time: number }[] = []
   for (const issue of BridgeChart.noteIssues) {
     const i = instConvert(issue.instrument)
@@ -170,7 +178,7 @@ export default function bridgeToChorusConverter (BridgeChart: NotesData) {
     hasTapNotes: BridgeChart.hasTapNotes,
     hasOpenNotes: BridgeChart.hasOpenNotes,
     has2xKick: BridgeChart.has2xKick,
-    chartIssues: converttedChartIssues,
+    chartIssues: chartIssueConvertArray(BridgeChart.chartIssues),
     tempoMapHash: BridgeChart.tempoMapHash,
     tempoMarkerCount: BridgeChart.tempoMarkerCount,
     length: BridgeChart.length,
