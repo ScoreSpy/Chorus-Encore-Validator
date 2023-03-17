@@ -1,5 +1,5 @@
 {
-  "baseDir": "",
-  "shadowDir": "",
+  "baseDir": "C:\\Users\\Ahriana\\Downloads\\test",
+  "outputDir": "C:\\Users\\Ahriana\\Documents\\Projects\\Chorus Encore\\Chorus-Encore-Validator\\shadow",
   "dryRun": false
 }
