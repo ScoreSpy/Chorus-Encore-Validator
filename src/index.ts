@@ -3,9 +3,10 @@ import './shim'
 import { askQuestion, fileExists, findSongs, isFile, keyPress, replacePathPart, sanitizeFileName } from './helpers'
 import { join, parse } from 'node:path'
 import { mkdir, writeFile } from 'node:fs/promises'
-import type { ApplicationArguments, SongData } from './types/chorus'
+import bridgeToChorusConverter from './bridgeToChorusConverter'
 import logger from './classes/logger'
 import Song from './classes/Song'
+import type { ApplicationArguments, SongData } from './types/chorus'
 import yargs from 'yargs'
 
 const isPackaged = Boolean(process.pkg)
@@ -96,6 +97,10 @@ async function init () {
 
     const data = song.toJSON()
     if (data === null) { continue }
+
+    // i.. should prob come back and do this properly some other time ^^;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (data as any).chartData = bridgeToChorusConverter(data.chartData)
 
     output.push(data)
     const outputPath = replacePathPart(parse(song.baseDir).dir, appArguments.baseDir, appArguments.outputDir)
