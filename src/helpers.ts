@@ -9,6 +9,14 @@ export function fileExists (path: string): Promise<boolean> {
   return access(path, FS_CONSTANTS.F_OK).then(() => true).catch(() => false)
 }
 
+export function isFile (path: string): Promise<boolean> {
+  return stat(path).then((s) => s.isFile()).catch(() => false)
+}
+
+export function isDirectory (path: string): Promise<boolean> {
+  return stat(path).then((s) => s.isDirectory()).catch(() => false)
+}
+
 export async function findSongs (rootDir: string, results: SongArchive[]): Promise<SongArchive[]> {
   const files = await readdir(rootDir)
   let songFound = false
@@ -16,7 +24,7 @@ export async function findSongs (rootDir: string, results: SongArchive[]): Promi
   for (const file of files) {
     const filePath = join(rootDir, file)
 
-    if ((await stat(filePath)).isDirectory()) {
+    if (await isDirectory(filePath)) {
       await findSongs(filePath, results)
     // eslint-disable-next-line prefer-named-capture-group
     } else if (!songFound && (/notes\.(chart|mid)$/iu).test(file)) {
