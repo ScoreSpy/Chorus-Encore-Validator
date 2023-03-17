@@ -5,20 +5,6 @@ export type SongArchive = {
     files: string[]
 }
 
-export type ChorusDiffMapString = {
-  x: string;
-  h: string;
-  m: string;
-  e: string;
-}
-
-export type ChorusDiffMapNumber = {
-  x: number;
-  h: number;
-  m: number;
-  e: number;
-}
-
 export type ChorusIni = {
   album_track?: string
   album?: string
