@@ -92,7 +92,10 @@ export function askQuestion (question: string, expected: string): Promise<void> 
 
 export function keyPress (): Promise<void> {
   console.log('\nPress Any Key To Exit')
-  process.stdin.setRawMode(true)
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode(true)
+  }
+
   return new Promise(() => process.stdin.once('data', () => {
     console.log('\n^C')
     process.exit(1)
