@@ -1,6 +1,6 @@
 /* eslint-disable guard-for-in */
 import './shim'
-import { askQuestion, fileExists, findSongs, keyPress, replacePathPart, sanitizeFileName } from './helpers'
+import { askQuestion, fileExists, findSongs, isFile, keyPress, replacePathPart, sanitizeFileName } from './helpers'
 import { join, parse } from 'node:path'
 import { mkdir, writeFile } from 'node:fs/promises'
 import type { ApplicationArguments, SongData } from './types'
@@ -19,14 +19,28 @@ async function init () {
 
   if (isPackaged) {
     if (process.argv.length > 2) {
-      const { argv } = yargs(process.argv.slice(2)).
-        option('baseDir', { type: 'string', description: 'The path to the base directory.', demandOption: true }).
-        option('outputDir', { type: 'string', description: 'The path to the output directory.', demandOption: true }).
-        option('dryRun', { type: 'boolean', description: 'Perform a dry run without actually copying files.', default: false }).
-        help().
-        alias('help', 'h')
+      if (process.argv.length === 3) { // for drag-and-drop support
+        let baseDir = process.argv[2]
+        let outputDir = join(baseDir, 'CE') // Output inside directory when given one
+        if (await isFile(baseDir)) {
+          baseDir = parse(baseDir).dir
+          outputDir = join(parse(baseDir).dir, 'CE') // Output to parent directory when given a file
+        }
+        appArguments = {
+          baseDir,
+          outputDir,
+          dryRun: false
+        }
+      } else {
+        const { argv } = yargs(process.argv.slice(2)).
+          option('baseDir', { type: 'string', description: 'The path to the base directory.', demandOption: true }).
+          option('outputDir', { type: 'string', description: 'The path to the output directory.', demandOption: true }).
+          option('dryRun', { type: 'boolean', description: 'Perform a dry run without actually copying files.', default: false }).
+          help().
+          alias('help', 'h')
 
-      appArguments = argv as ApplicationArguments
+        appArguments = argv as ApplicationArguments
+      }
     } else {
       setInterval(() => {
         // nasty hack that stops the terminal quitting out
@@ -67,6 +81,11 @@ async function init () {
   const results = await findSongs(appArguments.baseDir, [])
   logger.log(`found ${results.length} songs`)
   console.log(`found ${results.length} songs`)
+  // Hack to fix drag-and-dropping a single song folder not outputting correctly
+  if (results.length === 1 && results[0].baseFolder === appArguments.baseDir) {
+    appArguments.baseDir = parse(appArguments.baseDir).dir
+    appArguments.outputDir = join(appArguments.baseDir, 'CE')
+  }
 
   const output: SongData[] = []
 

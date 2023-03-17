@@ -1,12 +1,20 @@
 import { constants as FS_CONSTANTS } from 'node:fs'
 import { access, readdir, stat } from 'node:fs/promises'
-import { basename, dirname, join, normalize } from 'node:path'
+import { dirname, join, normalize } from 'node:path'
 import { BinaryLike, createHash } from 'node:crypto'
 import { createInterface } from 'node:readline'
 import type { SongArchive } from './types'
 
 export function fileExists (path: string): Promise<boolean> {
   return access(path, FS_CONSTANTS.F_OK).then(() => true).catch(() => false)
+}
+
+export function isFile (path: string): Promise<boolean> {
+  return stat(path).then((s) => s.isFile()).catch(() => false)
+}
+
+export function isDirectory (path: string): Promise<boolean> {
+  return stat(path).then((s) => s.isDirectory()).catch(() => false)
 }
 
 export async function findSongs (rootDir: string, results: SongArchive[]): Promise<SongArchive[]> {
@@ -16,7 +24,7 @@ export async function findSongs (rootDir: string, results: SongArchive[]): Promi
   for (const file of files) {
     const filePath = join(rootDir, file)
 
-    if ((await stat(filePath)).isDirectory()) {
+    if (await isDirectory(filePath)) {
       await findSongs(filePath, results)
     // eslint-disable-next-line prefer-named-capture-group
     } else if (!songFound && (/notes\.(chart|mid)$/iu).test(file)) {
@@ -57,11 +65,7 @@ export function getFilesafeTimestamp () {
 }
 
 export function replacePathPart (filePath: string, oldPart: string, newPart: string): string {
-  const dir = dirname(filePath)
-  const base = basename(filePath)
-  const newDir = dir.replace(normalize(oldPart), normalize(newPart))
-  const newPath = join(newDir, base)
-  return newPath
+  return filePath.replace(normalize(oldPart), normalize(newPart))
 }
 
 export function sanitizeFileName (fileName: string): string {
