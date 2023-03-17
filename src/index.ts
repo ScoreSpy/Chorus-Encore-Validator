@@ -20,13 +20,15 @@ async function init () {
   if (isPackaged) {
     if (process.argv.length > 2) {
       if (process.argv.length === 3) { // for drag-and-drop support
-        let path = process.argv[2]
-        if (await isFile(path)) {
-          path = parse(path).dir
+        let baseDir = process.argv[2]
+        let outputDir = join(baseDir, 'CE') // Output inside directory when given one
+        if (await isFile(baseDir)) {
+          baseDir = parse(baseDir).dir
+          outputDir = join(parse(baseDir).dir, 'CE') // Output to parent directory when given a file
         }
         appArguments = {
-          baseDir: path,
-          outputDir: join(path, 'CE'),
+          baseDir,
+          outputDir,
           dryRun: false
         }
       } else {
@@ -79,6 +81,11 @@ async function init () {
   const results = await findSongs(appArguments.baseDir, [])
   logger.log(`found ${results.length} songs`)
   console.log(`found ${results.length} songs`)
+  // Hack to fix drag-and-dropping a single song folder not outputting correctly
+  if (results.length === 1 && results[0].baseFolder === appArguments.baseDir) {
+    appArguments.baseDir = parse(appArguments.baseDir).dir
+    appArguments.outputDir = join(appArguments.baseDir, 'CE')
+  }
 
   const output: SongData[] = []
 

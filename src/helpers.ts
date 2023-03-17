@@ -1,6 +1,6 @@
 import { constants as FS_CONSTANTS } from 'node:fs'
 import { access, readdir, stat } from 'node:fs/promises'
-import { basename, dirname, join, normalize } from 'node:path'
+import { dirname, join, normalize } from 'node:path'
 import { BinaryLike, createHash } from 'node:crypto'
 import { createInterface } from 'node:readline'
 import type { SongArchive } from './types'
@@ -65,11 +65,7 @@ export function getFilesafeTimestamp () {
 }
 
 export function replacePathPart (filePath: string, oldPart: string, newPart: string): string {
-  const dir = dirname(filePath)
-  const base = basename(filePath)
-  const newDir = dir.replace(normalize(oldPart), normalize(newPart))
-  const newPath = join(newDir, base)
-  return newPath
+  return filePath.replace(normalize(oldPart), normalize(newPart))
 }
 
 export function sanitizeFileName (fileName: string): string {
