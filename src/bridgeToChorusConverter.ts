@@ -7,14 +7,14 @@ export enum ChorusInstrument {
   Drums = 1 << 3,
   Keys = 1 << 4,
   GuitarGHL = 1 << 5,
-  BassGHL = 1 << 6,
+  BassGHL = 1 << 6
 }
 
 export enum ChorusDifficulty {
   Expert = 1 << 0,
   Hard = 1 << 1,
   Medium = 1 << 2,
-  Easy = 1 << 3,
+  Easy = 1 << 3
 }
 
 export enum ChorusNoteIssueType {
@@ -23,12 +23,13 @@ export enum ChorusNoteIssueType {
   ThreeNoteDrumChord = 1 << 2,
   BrokenNote = 1 << 3,
   BadSustainGap = 1 << 4,
-  BabySustain = 1 << 5,
+  BabySustain = 1 << 5
 }
 
 export enum ChorusTrackIssueType {
   NoStarPower = 1 << 0,
   NoDrumActivationLanes = 1 << 1,
+  SmallLeadingSilence = 1 << 2
 }
 
 export enum ChorusChartIssueType {
@@ -40,12 +41,13 @@ export enum ChorusChartIssueType {
   IsDefaultBPM = 1 << 5,
   MisalignedTimeSignatures = 1 << 6,
   NoSections = 1 << 7,
-  SmallLeadingSilence = 1 << 8,
+  SmallLeadingSilence = 1 << 8
 }
 
 function trackIssueConvert (input: TrackIssueType): ChorusTrackIssueType {
   if (input === 'noStarPower') { return ChorusTrackIssueType.NoStarPower }
   if (input === 'noDrumActivationLanes') { return ChorusTrackIssueType.NoDrumActivationLanes }
+  if (input === 'smallLeadingSilence') { return ChorusTrackIssueType.SmallLeadingSilence }
   return 0
 }
 
@@ -116,7 +118,7 @@ function diffConvert (input: Difficulty): ChorusDifficulty {
 }
 
 export default function bridgeToChorusConverter (BridgeChart: NotesData) {
-  const chorusNoteIssues: { instrument: ChorusInstrument, difficulty: ChorusDifficulty, issueType: ChorusNoteIssueType, tick: number, time: number }[] = []
+  const chorusNoteIssues: { instrument: ChorusInstrument, difficulty: ChorusDifficulty, issueType: ChorusNoteIssueType, time: number }[] = []
   for (const issue of BridgeChart.noteIssues) {
     const i = instConvert(issue.instrument)
     const d = diffConvert(issue.difficulty)
@@ -126,7 +128,6 @@ export default function bridgeToChorusConverter (BridgeChart: NotesData) {
         instrument: i,
         difficulty: d,
         issueType: noteIssueConvert(nType.issueType),
-        tick: nType.tick,
         time: nType.time
       })
     }
@@ -150,14 +151,14 @@ export default function bridgeToChorusConverter (BridgeChart: NotesData) {
     })
   }
 
-  const chorusmaxNps: { instrument: ChorusInstrument, difficulty: ChorusDifficulty, tick: number, time: number, nps: number }[] = []
+  const chorusmaxNps: { instrument: ChorusInstrument, difficulty: ChorusDifficulty, time: number, nps: number }[] = []
   for (const nps of BridgeChart.maxNps) {
     chorusmaxNps.push({
       instrument: instConvert(nps.instrument),
       difficulty: diffConvert(nps.difficulty),
-      tick: nps.tick,
       time: nps.time,
       nps: nps.nps
+      // notes: nps.notes
     })
   }
 
