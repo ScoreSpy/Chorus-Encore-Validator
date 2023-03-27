@@ -38,7 +38,7 @@ export interface NotesData {
   noteCounts: { instrument: Instrument; difficulty: Difficulty; count: number }[]
 
   /** The highest notes-per-second in each instrument and difficulty. Measured across a 1 second window. */
-  maxNps: { instrument: Instrument; difficulty: Difficulty; tick: number; time: number; nps: number }[]
+  maxNps: { instrument: Instrument; difficulty: Difficulty; time: number; nps: number; notes: TrackEvent[] }[]
 
   /** The MD5 checksums of each instrument and difficulty. */
   hashes: { instrument: Instrument; difficulty: Difficulty; hash: string }[]
@@ -49,10 +49,10 @@ export interface NotesData {
   /** The number of tempo markers in the chart. */
   tempoMarkerCount: number
 
-  /** The number of seconds between the start of the chart and the last note. */
+  /** The number of milliseconds between the start of the chart and the last note. */
   length: number
 
-  /** The number of seconds between the first note of the chart and the last note. */
+  /** The number of milliseconds between the first note of the chart and the last note. */
   effectiveLength: number
 }
 
@@ -60,10 +60,7 @@ export interface NoteIssue {
   /** The type of issue. */
   issueType: NoteIssueType
 
-  /** The index position of the note in the chart file. */
-  tick: number
-
-  /** The number of seconds into the chart where the broken note appears. */
+  /** The number of milliseconds into the chart where the broken note appears. */
   time: number
 }
 
@@ -85,7 +82,9 @@ export type TrackIssueType =
   /** This track has no star power. */
   'noStarPower' |
   /** This drums track has no activation lanes. */
-  'noDrumActivationLanes'
+  'noDrumActivationLanes' |
+  /** This track has a note that is less than 2000ms after the start of the track. */
+  'smallLeadingSilence'
 
 export type ChartIssueType =
   /** This chart's data isn't structured or encoded correctly. */
@@ -103,7 +102,49 @@ export type ChartIssueType =
   /** This chart has a time signature marker that doesn't appear at the start of a measure. */
   'misalignedTimeSignatures' |
   /** This chart has no sections. */
-  'noSections' |
-  /** This chart has a note that is less than 2000ms after the start of the track. */
-  'smallLeadingSilence'
+  'noSections'
 
+export enum EventType {
+  starPower,
+  tap,
+  force,
+  orange,
+  blue,
+  yellow,
+  red,
+  green,
+  open,
+  soloMarker,
+
+  // 6 fret
+  black3,
+  black2,
+  black1,
+  white3,
+  white2,
+  white1,
+
+  // Drums
+  activationLane,
+  kick,
+  kick2x,
+}
+
+export interface TrackEvent {
+  /** Time of the event in milliseconds. */
+  time: number
+
+  /** The type of the event. */
+  type: EventType
+
+  /** The length of the event in milliseconds. Some events have a length of zero. */
+  length: number
+}
+
+export interface GroupedTrackEvent {
+  /** Time of the event in milliseconds. Rounded to 3 decimal places. */
+  time: number
+
+  /** All `TrackEvents` that occur at `time`. */
+  events: TrackEvent[]
+}
