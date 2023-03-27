@@ -154,6 +154,7 @@ export default class Song {
     try {
       this.output.iniData = await this.parseIni()
     } catch (error) {
+      console.error(error)
       this.errors.push((error as Error).message)
     }
 
@@ -172,6 +173,7 @@ export default class Song {
     try {
       this.output.chartData = await this.parseChart()
     } catch (error) {
+      console.error(error)
       this.errors.push((error as Error).message)
     }
 
