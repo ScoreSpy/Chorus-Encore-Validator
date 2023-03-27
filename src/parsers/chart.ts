@@ -1,3 +1,4 @@
+/* eslint-disable no-param-reassign */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable no-return-assign */
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
@@ -151,13 +152,7 @@ class ChartParser {
 
     const trackParsers = _.chain(this.trackSections).
       entries().
-      map(([track, lines]) => new TrackParser(
-        this.notesData,
-        trackNameMap[track as TrackName].instrument,
-        trackNameMap[track as TrackName].difficulty,
-        this.parseTrackLines(lines, trackNameMap[track as TrackName].instrument),
-        'chart'
-      )).
+      map(([track, lines]) => new TrackParser(this.notesData, trackNameMap[track as TrackName].instrument, trackNameMap[track as TrackName].difficulty, this.parseTrackLines(lines, trackNameMap[track as TrackName].instrument), 'chart')).
       value()
 
     trackParsers.forEach((p) => p.parseTrack())
@@ -190,7 +185,7 @@ class ChartParser {
     return this.notesData
   }
 
-  private parseTrackLines(lines: string[], instrument: Instrument) {
+  private parseTrackLines (lines: string[], instrument: Instrument) {
     let lastBpmIndex = 0
     const trackEvents: TrackEvent[] = []
 
@@ -199,7 +194,7 @@ class ChartParser {
         trim().
         thru((l) => (/^(\d+) = ([A-Z]+) ([\d\w]+) ?(\d+)?$/).exec(l) || [] as string[]).
         drop(1).
-        thru((parts) => ({ tick: +parts[0], typeCode: parts[1], value: parts[2], len: +parts[3] })).
+        thru((parts) => ({ tick: Number(parts[0]), typeCode: parts[1], value: parts[2], len: Number(parts[3]) })).
         value()
 
       // Update lastMarker to the closest BPM marker behind this note
@@ -216,7 +211,7 @@ class ChartParser {
     return trackEvents
   }
 
-  private timeFromTick(lastBpmIndex: number, tick: number) {
+  private timeFromTick (lastBpmIndex: number, tick: number) {
     while (this.tempoMap[lastBpmIndex + 1] && this.tempoMap[lastBpmIndex + 1].tick > tick) {
       lastBpmIndex++
     }
@@ -225,7 +220,7 @@ class ChartParser {
     return _.round(this.tempoMap[lastBpmIndex].time + (tick - this.tempoMap[lastBpmIndex].tick) * msPerTickInRegion, 3)
   }
 
-  private getEventType(typeCode: string, value: string, instrument: Instrument) {
+  private getEventType (typeCode: string, value: string, instrument: Instrument) {
     switch (typeCode) {
     case 'E': {
       switch (value) {
