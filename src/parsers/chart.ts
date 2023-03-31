@@ -198,7 +198,7 @@ class ChartParser {
         value()
 
       // Update lastMarker to the closest BPM marker behind this note
-      if (parsedLine.tick >= this.tempoMap[lastBpmIndex].tick && this.tempoMap[lastBpmIndex + 1]) { lastBpmIndex++ }
+      if (this.tempoMap[lastBpmIndex + 1] && parsedLine.tick >= this.tempoMap[lastBpmIndex + 1].tick) { lastBpmIndex++ }
 
       const time = this.timeFromTick(lastBpmIndex, parsedLine.tick)
       const length = parsedLine.len ? this.timeFromTick(lastBpmIndex, parsedLine.tick + parsedLine.len) - time : 0
@@ -212,12 +212,12 @@ class ChartParser {
   }
 
   private timeFromTick (lastBpmIndex: number, tick: number) {
-    while (this.tempoMap[lastBpmIndex + 1] && this.tempoMap[lastBpmIndex + 1].tick > tick) {
+    while (this.tempoMap[lastBpmIndex + 1] && this.tempoMap[lastBpmIndex + 1].tick < tick) {
       lastBpmIndex++
     }
     // the "Resolution" parameter is the number of ticks in each beat, so `bpm * resolution` is the ticks per minute
     const msPerTickInRegion = 60000 / (this.tempoMap[lastBpmIndex].bpm * this.resolution)
-    return _.round(this.tempoMap[lastBpmIndex].time + (tick - this.tempoMap[lastBpmIndex].tick) * msPerTickInRegion, 3)
+    return _.round(this.tempoMap[lastBpmIndex].time + ((tick - this.tempoMap[lastBpmIndex].tick) * msPerTickInRegion), 3)
   }
 
   private getEventType (typeCode: string, value: string, instrument: Instrument) {

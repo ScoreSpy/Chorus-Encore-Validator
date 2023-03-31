@@ -152,7 +152,7 @@ class MidiParser {
           difficulty: sysExDifficultyMap[event.data[4]],
           time: event.playTime!,
           type: event.data[5] === 0x01 ? EventType.open : event.data[5] === 0x04 ? EventType.tap : null,
-          isStart: event.data[6] === 0x00
+          isStart: event.data[6] === 0x01
         }
       }
     }
@@ -233,7 +233,11 @@ class MidiParser {
       case EventType.force: break
       default: {
         if (openEnabled) { trackEventEnd.type = EventType.open }
-        if (tapEnabled) { trackEventEnd.type = EventType.tap }
+        if (tapEnabled && trackEventEnd.isStart) {
+          const tapMarker = _.clone(trackEventEnd)
+          tapMarker.type = EventType.tap
+          reducedTrackEventEnds.push(tapMarker)
+        }
       }
       }
       reducedTrackEventEnds.push(trackEventEnd)
@@ -364,7 +368,7 @@ class MidiParser {
       if (events[i].tempo) {
         currentTempo = events[i].tempo!
       } else if (events[i].param1) {
-        timeSignatures.push({ ...events[i], tick: currentTick })
+        timeSignatures.push({ ...events[i], tick: _.round(currentTick) })
       }
     }
 

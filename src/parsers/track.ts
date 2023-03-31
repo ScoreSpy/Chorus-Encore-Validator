@@ -156,23 +156,21 @@ export class TrackParser {
       const greenBlueChordIds = [EventType.green, EventType.blue]
       const redOrangeChordIds = [EventType.red, EventType.orange]
       const greenOrangeChordIds = [EventType.green, EventType.orange]
-      const openIds = [EventType.open]
-      const openOrangeIds = [EventType.open, EventType.orange]
-      const openOrangeBlueIds = [EventType.open, EventType.orange, EventType.blue]
+      const orangeIds = [EventType.orange]
+      const orangeBlueIds = [EventType.orange, EventType.blue]
       for (const note of this.groupedNotes) {
         // Check for five-note chords
         if (this.typeCount(note, fiveNoteChordIds) === 5) { this.addNoteIssue('fiveNoteChord', note.time) }
         // Check for notes forbidden on lower difficulties
         if (this.difficulty === 'hard') {
-          if (this.typeCount(note, openIds) > 0) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
           if (this.typeCount(note, greenBlueChordIds) === 2) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
           if (this.typeCount(note, redOrangeChordIds) === 2) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
           if (this.typeCount(note, greenOrangeChordIds) === 2) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
         } else if (this.difficulty === 'medium') {
-          if (this.typeCount(note, openOrangeIds) > 0) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+          if (this.typeCount(note, orangeIds) > 0) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
           if (this.typeCount(note, greenBlueChordIds) === 2) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
         } else if (this.difficulty === 'easy') {
-          if (this.typeCount(note, openOrangeBlueIds) > 0) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
+          if (this.typeCount(note, orangeBlueIds) > 0) { this.addNoteIssue('difficultyForbiddenNote', note.time) }
         }
       }
     }
@@ -203,6 +201,7 @@ export class TrackParser {
   }
 
   private setNpsProperties () {
+    if (!this.groupedNotes.length) { return }
     /** The list of ticks that contain previous notes that are within `NPS_GROUP_SIZE_MS` milliseconds of `note`. */
     const recentNoteTimes: number[] = []
     /** Last note in the highest-nps group. */
