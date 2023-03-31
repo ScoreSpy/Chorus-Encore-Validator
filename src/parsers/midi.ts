@@ -368,7 +368,7 @@ class MidiParser {
       if (events[i].tempo) {
         currentTempo = events[i].tempo!
       } else if (events[i].param1) {
-        timeSignatures.push({ ...events[i], tick: _.round(currentTick) })
+        timeSignatures.push({ ...events[i], tick: _.round(currentTick, 5) })
       }
     }
 
